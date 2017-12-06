@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"util"
 	"worker"
+
+	"google.golang.org/grpc"
 )
 
 var (
@@ -57,12 +59,15 @@ func main() {
 	}
 
 	fmt.Printf("to run server on port: %d\n", portInt)
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			fmt.Printf("[Error]%s", err.Error())
-		}
+	svr := grpc.NewServer()
+	worker.RegisterGreeterServer(svr)
+	svr.Serve(ln)
+	//	for {
+	//		conn, err := ln.Accept()
+	//		if err != nil {
+	//			fmt.Printf("[Error]%s", err.Error())
+	//		}
 
-		go handler(&conn)
-	}
+	//		go handler(&conn)
+	//	}
 }

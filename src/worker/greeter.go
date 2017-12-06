@@ -1,34 +1,20 @@
 package worker
 
 import (
-	"common"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
-	"net/url"
-	"time"
+	pb "proto/greeter"
+
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
-var regClient = &http.Client{Timeout: 10 * time.Second}
+type server struct{}
 
-func Register(host string, port int) error {
-	data := make(url.Values)
-	data["host"] = []string{fmt.Sprintf("%s:%d", host, port)}
+func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
+	fmt.Println("SayHello Called.")
+	return &pb.HelloResponse{Message: "Hi " + in.Name}, nil
+}
 
-	resp, err := regClient.PostForm("http://127.0.0.1:8088/add", data)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	var regResp common.CommonResp
-	err = json.NewDecoder(resp.Body).Decode(&regResp)
-	if err != nil {
-		return err
-	}
-	if regResp.Code != common.REG_WORKER_OK {
-		return errors.New(fmt.Sprintf("Error: %s", regResp.Message))
-	}
-	return nil
+func RegisterGreeterServer(gsvr *grpc.Server) {
+	pb.RegisterGreeterServer(gsvr, &server{})
 }
