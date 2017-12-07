@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"logger"
 	"net/http"
 	"net/url"
 	"time"
@@ -13,6 +14,20 @@ import (
 var regClient = &http.Client{Timeout: 10 * time.Second}
 
 func Register(host string, port int) error {
+	go func() {
+		for {
+			time.Sleep(time.Second * common.HEARTBEAT_INTERVAL)
+			err := reportHeartbeat(host, port)
+			if err != nil {
+				logger.LogErrorf("Send heartbeat failed: %s", err.Error())
+			}
+
+		}
+	}()
+	return reportHeartbeat(host, port)
+}
+
+func reportHeartbeat(host string, port int) error {
 	data := make(url.Values)
 	data["host"] = []string{fmt.Sprintf("%s:%d", host, port)}
 

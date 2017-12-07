@@ -1,7 +1,7 @@
 package worker
 
 import (
-	"fmt"
+	"logger"
 	pb "proto/greeter"
 
 	"golang.org/x/net/context"
@@ -11,7 +11,7 @@ import (
 type server struct{}
 
 func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloResponse, error) {
-	fmt.Println("SayHello Called.")
+	logger.LogInfo("SayHello Called.")
 	return &pb.HelloResponse{Message: "Hi " + in.Name}, nil
 }
 

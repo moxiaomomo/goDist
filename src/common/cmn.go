@@ -3,6 +3,8 @@ package common
 const (
 	REG_WORKER_OK     = 0
 	REG_WORKER_FAILED = -1
+
+	HEARTBEAT_INTERVAL = 5
 )
 
 type CommonResp struct {

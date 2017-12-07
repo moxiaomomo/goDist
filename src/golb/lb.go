@@ -1,7 +1,9 @@
 package golb
 
 import (
+	"common"
 	"errors"
+	"time"
 )
 
 var (
@@ -10,7 +12,8 @@ var (
 )
 
 type Worker struct {
-	Host string
+	Heartbeat int64 // last heartbeat timestamp
+	Host      string
 }
 
 var workers []Worker
@@ -31,8 +34,9 @@ func Workers() []Worker {
 }
 
 func AddWorker(w Worker) error {
-	for _, v := range workers {
-		if v.IsEqual(w) {
+	for i := 0; i < len(workers); i++ {
+		if workers[i].IsEqual(w) {
+			workers[i].Heartbeat = w.Heartbeat
 			return ERR_WORKER_EXISTS
 		}
 	}
@@ -52,4 +56,21 @@ func RemoveWorker(w Worker) error {
 		}
 	}
 	return ERR_WORKER_NOT_EXISTS
+}
+
+func RemoveWorkerAsTimeout() {
+	for {
+		now := time.Now().Unix()
+		for k, v := range workers {
+			// timeout after twice heartbeat interval
+			if now-v.Heartbeat > common.HEARTBEAT_INTERVAL*2 {
+				if k == len(workers)-1 {
+					workers = workers[:k]
+				} else {
+					workers = append(workers[:k], workers[k+1:]...)
+				}
+			}
+		}
+		time.Sleep(time.Second)
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"logger"
 	"net"
 	"os"
 	"strconv"
@@ -27,47 +28,41 @@ func handler(conn *net.Conn) error {
 		return err
 	}
 
-	fmt.Printf("[Info]readbuf:%s", buf.String())
+	logger.LogInfof("readbuf:%s", buf.String())
 
 	return nil
 }
 
 func main() {
+	logger.SetLogLevel(logger.LOG_INFO)
+
 	portInt, err := strconv.Atoi(*port)
 	if err != nil {
-		fmt.Printf("[Error]%s", err.Error())
+		logger.LogError(err.Error())
 		os.Exit(-1)
 	}
 
 	lip := util.GetLocalIP()
 	if len(lip) == 0 {
-		fmt.Printf("[Error]Cannot get local ip.")
+		logger.LogError("Cannot get local ip.")
 		os.Exit(-1)
 	}
 	err = worker.Register(lip, portInt)
 	if err != nil {
-		fmt.Printf("[Error]%s", err.Error())
+		logger.LogError(err.Error())
 		os.Exit(-1)
 	} else {
-		fmt.Printf("[Info]Register worker succeeded.")
+		logger.LogInfo("Register worker succeeded.")
 	}
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", portInt))
 	if err != nil {
-		fmt.Printf("[Error]%s", err.Error())
+		logger.LogError(err.Error())
 		os.Exit(-1)
 	}
 
-	fmt.Printf("to run server on port: %d\n", portInt)
+	logger.LogInfof("to run server on port: %d\n", portInt)
 	svr := grpc.NewServer()
 	worker.RegisterGreeterServer(svr)
 	svr.Serve(ln)
-	//	for {
-	//		conn, err := ln.Accept()
-	//		if err != nil {
-	//			fmt.Printf("[Error]%s", err.Error())
-	//		}
-
-	//		go handler(&conn)
-	//	}
 }

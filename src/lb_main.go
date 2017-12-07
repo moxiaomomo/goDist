@@ -3,9 +3,10 @@ package main
 import (
 	"common"
 	"encoding/json"
-	"fmt"
 	"golb"
+	"logger"
 	"net/http"
+	"time"
 
 	pb "proto/greeter"
 
@@ -21,7 +22,10 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	host := r.Form["host"][0]
 
-	golb.AddWorker(golb.Worker{Host: host})
+	regErr := golb.AddWorker(golb.Worker{Host: host, Heartbeat: time.Now().Unix()})
+	if regErr == nil {
+		logger.LogInfof("Suc to register worker: %s\n", host)
+	}
 
 	regResp := common.CommonResp{
 		Code:    common.REG_WORKER_OK,
@@ -32,7 +36,6 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("internel server error."))
 		return
 	}
-	fmt.Printf("Suc to register worker: %s\n", host)
 	w.Write(respBody)
 }
 
@@ -59,7 +62,7 @@ func RemoveHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func HelloHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("To call SayHello.")
+	logger.LogDebug("To call SayHello.")
 	workers := golb.Workers()
 	if len(workers) <= 0 {
 		w.Write([]byte("out of service."))
@@ -67,7 +70,7 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	conn, err := grpc.Dial(workers[0].Host, grpc.WithInsecure())
 	if err != nil {
-		fmt.Println("grpc call failed.")
+		logger.LogError("grpc call failed.")
 		w.Write([]byte("internel server error."))
 		return
 	}
@@ -80,7 +83,7 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := client.SayHello(context.Background(), &reqbody)
 	if err != nil {
-		fmt.Println("call sayhello failed.")
+		logger.LogError("call sayhello failed.")
 		w.Write([]byte("internel server error."))
 		return
 	}
@@ -88,9 +91,13 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	logger.SetLogLevel(logger.LOG_INFO)
+
+	go golb.RemoveWorkerAsTimeout()
+
 	http.HandleFunc("/add", AddHandler)
 	http.HandleFunc("/remove", RemoveHandler)
 	http.HandleFunc("/hello", HelloHandler)
-	fmt.Println("to start server on port: 8088")
+	logger.LogInfo("to start server on port: 8088")
 	http.ListenAndServe(":8088", nil)
 }
