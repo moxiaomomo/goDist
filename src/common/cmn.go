@@ -11,3 +11,11 @@ type CommonResp struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
+
+type LBPolicyEnum int
+
+const (
+	_ LBPolicyEnum = iota
+	LB_RANDOM
+	LB_ROUNDROBIN
+)

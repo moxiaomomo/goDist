@@ -3,6 +3,9 @@ package golb
 import (
 	"common"
 	"errors"
+	"logger"
+	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -16,10 +19,21 @@ type Worker struct {
 	Host      string
 }
 
-var workers []Worker
+type Workers struct {
+	Members     []Worker
+	lastRRIndex int
+	sync.Mutex
+}
+
+var workers Workers = Workers{lastRRIndex: 0}
+var lb_Policy common.LBPolicyEnum = common.LB_RANDOM
 
 type Comparable interface {
 	IsEqual(a interface{}) bool
+}
+
+func SetLBPolicy(p common.LBPolicyEnum) {
+	lb_Policy = p
 }
 
 func (w *Worker) IsEqual(nw interface{}) bool {
@@ -29,28 +43,30 @@ func (w *Worker) IsEqual(nw interface{}) bool {
 	return false
 }
 
-func Workers() []Worker {
-	return workers
-}
-
 func AddWorker(w Worker) error {
-	for i := 0; i < len(workers); i++ {
-		if workers[i].IsEqual(w) {
-			workers[i].Heartbeat = w.Heartbeat
+	workers.Mutex.Lock()
+	defer workers.Mutex.Unlock()
+
+	for i := 0; i < len(workers.Members); i++ {
+		if workers.Members[i].IsEqual(w) {
+			workers.Members[i].Heartbeat = w.Heartbeat
 			return ERR_WORKER_EXISTS
 		}
 	}
-	workers = append(workers, w)
+	workers.Members = append(workers.Members, w)
 	return nil
 }
 
 func RemoveWorker(w Worker) error {
-	for k, v := range workers {
+	workers.Mutex.Lock()
+	defer workers.Mutex.Unlock()
+
+	for k, v := range workers.Members {
 		if v.IsEqual(w) {
-			if k == len(workers)-1 {
-				workers = workers[:k]
+			if k == len(workers.Members)-1 {
+				workers.Members = workers.Members[:k]
 			} else {
-				workers = append(workers[:k], workers[k+1:]...)
+				workers.Members = append(workers.Members[:k], workers.Members[k+1:]...)
 			}
 			return nil
 		}
@@ -60,17 +76,56 @@ func RemoveWorker(w Worker) error {
 
 func RemoveWorkerAsTimeout() {
 	for {
-		now := time.Now().Unix()
-		for k, v := range workers {
-			// timeout after twice heartbeat interval
-			if now-v.Heartbeat > common.HEARTBEAT_INTERVAL*2 {
-				if k == len(workers)-1 {
-					workers = workers[:k]
-				} else {
-					workers = append(workers[:k], workers[k+1:]...)
+		func() {
+			workers.Mutex.Lock()
+			defer workers.Mutex.Unlock()
+
+			now := time.Now().Unix()
+			for k, v := range workers.Members {
+				// timeout after twice heartbeat interval
+				if now-v.Heartbeat > common.HEARTBEAT_INTERVAL*2 {
+					if k == len(workers.Members)-1 {
+						workers.Members = workers.Members[:k]
+					} else {
+						workers.Members = append(workers.Members[:k], workers.Members[k+1:]...)
+					}
+					logger.LogWarnf("Lost heartbeat from worker: %s", v.Host)
 				}
 			}
-		}
+		}()
+
 		time.Sleep(time.Second)
 	}
+}
+
+func GetWorker() (Worker, error) {
+	if lb_Policy == common.LB_ROUNDROBIN {
+		return RoundRobinWorker()
+	}
+	return RandomWorker()
+}
+
+func RandomWorker() (Worker, error) {
+	workers.Mutex.Lock()
+	defer workers.Mutex.Unlock()
+
+	if len(workers.Members) <= 0 {
+		return Worker{}, errors.New("Empty workers")
+	}
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return workers.Members[r.Intn(len(workers.Members))], nil
+}
+
+func RoundRobinWorker() (Worker, error) {
+	workers.Mutex.Lock()
+	defer workers.Mutex.Unlock()
+
+	if len(workers.Members) <= 0 {
+		return Worker{}, errors.New("Empty workers")
+	}
+
+	defer func() {
+		workers.lastRRIndex = (workers.lastRRIndex + 1) % len(workers.Members)
+	}()
+	return workers.Members[workers.lastRRIndex%len(workers.Members)], nil
 }

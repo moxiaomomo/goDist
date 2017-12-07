@@ -7,11 +7,6 @@ import (
 	"logger"
 	"net/http"
 	"time"
-
-	pb "proto/greeter"
-
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 )
 
 func AddHandler(w http.ResponseWriter, r *http.Request) {
@@ -61,43 +56,16 @@ func RemoveHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(respBody)
 }
 
-func HelloHandler(w http.ResponseWriter, r *http.Request) {
-	logger.LogDebug("To call SayHello.")
-	workers := golb.Workers()
-	if len(workers) <= 0 {
-		w.Write([]byte("out of service."))
-		return
-	}
-	conn, err := grpc.Dial(workers[0].Host, grpc.WithInsecure())
-	if err != nil {
-		logger.LogError("grpc call failed.")
-		w.Write([]byte("internel server error."))
-		return
-	}
-	defer conn.Close()
-
-	client := pb.NewGreeterClient(conn)
-	reqbody := pb.HelloRequest{
-		Name:    "xiaomo",
-		Message: "just4fun",
-	}
-	resp, err := client.SayHello(context.Background(), &reqbody)
-	if err != nil {
-		logger.LogError("call sayhello failed.")
-		w.Write([]byte("internel server error."))
-		return
-	}
-	w.Write([]byte(resp.Message))
-}
-
 func main() {
 	logger.SetLogLevel(logger.LOG_INFO)
 
 	go golb.RemoveWorkerAsTimeout()
+	golb.InitHandlers()
+	golb.SetLBPolicy(common.LB_ROUNDROBIN)
 
 	http.HandleFunc("/add", AddHandler)
 	http.HandleFunc("/remove", RemoveHandler)
-	http.HandleFunc("/hello", HelloHandler)
+
 	logger.LogInfo("to start server on port: 8088")
 	http.ListenAndServe(":8088", nil)
 }

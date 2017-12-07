@@ -34,6 +34,7 @@ func handler(conn *net.Conn) error {
 }
 
 func main() {
+	flag.Parse()
 	logger.SetLogLevel(logger.LOG_INFO)
 
 	portInt, err := strconv.Atoi(*port)
@@ -47,18 +48,19 @@ func main() {
 		logger.LogError("Cannot get local ip.")
 		os.Exit(-1)
 	}
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", portInt))
+	if err != nil {
+		logger.LogError(err.Error())
+		os.Exit(-1)
+	}
+
 	err = worker.Register(lip, portInt)
 	if err != nil {
 		logger.LogError(err.Error())
 		os.Exit(-1)
 	} else {
 		logger.LogInfo("Register worker succeeded.")
-	}
-
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", portInt))
-	if err != nil {
-		logger.LogError(err.Error())
-		os.Exit(-1)
 	}
 
 	logger.LogInfof("to run server on port: %d\n", portInt)
