@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"common"
 	"flag"
 	"fmt"
 	"io"
@@ -35,7 +36,7 @@ func handler(conn *net.Conn) error {
 
 func main() {
 	flag.Parse()
-	logger.SetLogLevel(logger.LOG_INFO)
+	logger.SetLogLevel(common.LOG_INFO)
 
 	portInt, err := strconv.Atoi(*port)
 	if err != nil {

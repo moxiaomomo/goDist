@@ -2,6 +2,7 @@ package golb
 
 import (
 	"common"
+	"config"
 	"errors"
 	"logger"
 	"math/rand"
@@ -26,14 +27,13 @@ type Workers struct {
 }
 
 var workers Workers = Workers{lastRRIndex: 0}
-var lb_Policy common.LBPolicyEnum = common.LB_RANDOM
 
 type Comparable interface {
 	IsEqual(a interface{}) bool
 }
 
 func SetLBPolicy(p common.LBPolicyEnum) {
-	lb_Policy = p
+	config.SetGlobalLBConfig(map[string]interface{}{"LBPolicy": p})
 }
 
 func (w *Worker) IsEqual(nw interface{}) bool {
@@ -99,7 +99,7 @@ func RemoveWorkerAsTimeout() {
 }
 
 func GetWorker() (Worker, error) {
-	if lb_Policy == common.LB_ROUNDROBIN {
+	if config.GlobalLBConfig().LBPolicy == common.LB_ROUNDROBIN {
 		return RoundRobinWorker()
 	}
 	return RandomWorker()

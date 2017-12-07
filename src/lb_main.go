@@ -57,7 +57,7 @@ func RemoveHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	logger.SetLogLevel(logger.LOG_INFO)
+	logger.SetLogLevel(common.LOG_INFO)
 
 	go golb.RemoveWorkerAsTimeout()
 	golb.InitHandlers()

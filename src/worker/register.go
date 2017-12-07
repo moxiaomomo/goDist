@@ -19,7 +19,7 @@ func Register(host string, port int) error {
 			time.Sleep(time.Second * common.HEARTBEAT_INTERVAL)
 			err := reportHeartbeat(host, port)
 			if err != nil {
-				logger.LogErrorf("Send heartbeat failed: %s", err.Error())
+				logger.LogErrorf("Send heartbeat failed: %s\n", err.Error())
 			}
 
 		}
