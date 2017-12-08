@@ -23,6 +23,7 @@ const (
 	_ LBPolicyEnum = iota
 	LB_RANDOM
 	LB_ROUNDROBIN
+	LB_FASTRESP
 )
 
 type LogLevelEnum int

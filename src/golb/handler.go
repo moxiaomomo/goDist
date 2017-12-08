@@ -20,7 +20,10 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("out of service."))
 		return
 	}
-	conn, err := grpc.Dial(worker.Host, grpc.WithInsecure())
+
+	timer := ProcTimer{}
+	timer.OnStart()
+	conn, err := grpc.Dial(worker.HostToCall(), grpc.WithInsecure())
 	if err != nil {
 		logger.LogError("grpc call failed.")
 		w.Write([]byte("internel server error."))
@@ -34,10 +37,13 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 		Message: "just4fun",
 	}
 	resp, err := client.SayHello(context.Background(), &reqbody)
+	timer.OnEnd()
 	if err != nil {
 		logger.LogError("call sayhello failed.")
 		w.Write([]byte("internel server error."))
 		return
 	}
+
+	worker.AsTaskFinished(timer.Duration())
 	w.Write([]byte(resp.Message))
 }

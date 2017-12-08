@@ -61,7 +61,7 @@ func main() {
 
 	go golb.RemoveWorkerAsTimeout()
 	golb.InitHandlers()
-	golb.SetLBPolicy(common.LB_ROUNDROBIN)
+	golb.SetLBPolicy(common.LB_FASTRESP)
 
 	http.HandleFunc("/add", AddHandler)
 	http.HandleFunc("/remove", RemoveHandler)

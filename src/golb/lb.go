@@ -18,6 +18,9 @@ var (
 type Worker struct {
 	Heartbeat int64 // last heartbeat timestamp
 	Host      string
+	callCount int
+	respMS    int // average response time in microsecond
+	sync.Mutex
 }
 
 type Workers struct {
@@ -26,10 +29,22 @@ type Workers struct {
 	sync.Mutex
 }
 
-var workers Workers = Workers{lastRRIndex: 0}
+var workers Workers = NewWorkers()
 
 type Comparable interface {
 	IsEqual(a interface{}) bool
+}
+
+func NewWorker() *Worker {
+	return &Worker{
+		callCount: 0,
+	}
+}
+
+func NewWorkers() Workers {
+	return Workers{
+		lastRRIndex: 0,
+	}
 }
 
 func SetLBPolicy(p common.LBPolicyEnum) {
@@ -41,6 +56,35 @@ func (w *Worker) IsEqual(nw interface{}) bool {
 		return w.Host == cmpnw.Host
 	}
 	return false
+}
+
+// get host to call, and do something extra
+func (w *Worker) HostToCall() string {
+	//	w.Mutex.Lock()
+	//	defer w.Mutex.Unlock()
+
+	//	w.callCount += 1
+	return w.Host
+}
+
+func (w *Worker) CallCount() int {
+	return w.callCount
+}
+
+func (w *Worker) AsTaskFinished(timeUsed int) {
+	w.Mutex.Lock()
+	defer w.Mutex.Unlock()
+
+	if timeUsed <= 0 || timeUsed > 600000 { // default 10mins timeout
+		return
+	}
+
+	w.respMS = int((w.respMS*w.callCount + timeUsed) / (w.callCount + 1))
+	w.callCount += 1
+}
+
+func (w *Worker) ResponseTimeUsed() int {
+	return w.respMS
 }
 
 func AddWorker(w Worker) error {
@@ -98,34 +142,67 @@ func RemoveWorkerAsTimeout() {
 	}
 }
 
-func GetWorker() (Worker, error) {
-	if config.GlobalLBConfig().LBPolicy == common.LB_ROUNDROBIN {
+func GetWorker() (*Worker, error) {
+	switch config.GlobalLBConfig().LBPolicy {
+	case common.LB_ROUNDROBIN:
 		return RoundRobinWorker()
+	case common.LB_FASTRESP:
+		return FastResponseWorker()
+	default:
+		return RandomWorker()
 	}
-	return RandomWorker()
 }
 
-func RandomWorker() (Worker, error) {
+func RandomWorker() (*Worker, error) {
 	workers.Mutex.Lock()
 	defer workers.Mutex.Unlock()
 
+	var worker = NewWorker()
+
 	if len(workers.Members) <= 0 {
-		return Worker{}, errors.New("Empty workers")
+		return worker, errors.New("Empty workers")
 	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	return workers.Members[r.Intn(len(workers.Members))], nil
+	worker = &workers.Members[r.Intn(len(workers.Members))]
+	return worker, nil
 }
 
-func RoundRobinWorker() (Worker, error) {
+func RoundRobinWorker() (*Worker, error) {
 	workers.Mutex.Lock()
 	defer workers.Mutex.Unlock()
 
+	var worker = NewWorker()
+
 	if len(workers.Members) <= 0 {
-		return Worker{}, errors.New("Empty workers")
+		return worker, errors.New("Empty workers")
 	}
 
 	defer func() {
 		workers.lastRRIndex = (workers.lastRRIndex + 1) % len(workers.Members)
 	}()
-	return workers.Members[workers.lastRRIndex%len(workers.Members)], nil
+	index := workers.lastRRIndex % len(workers.Members)
+	worker = &workers.Members[index]
+	logger.LogDebug(index, worker.respMS)
+	return worker, nil
+}
+
+func FastResponseWorker() (*Worker, error) {
+	workers.Mutex.Lock()
+	defer workers.Mutex.Unlock()
+
+	var worker = NewWorker()
+
+	if len(workers.Members) <= 0 {
+		return worker, errors.New("Empty workers")
+	}
+
+	var minRespIdx int = 0
+	for k, v := range workers.Members {
+		if v.ResponseTimeUsed() < workers.Members[minRespIdx].ResponseTimeUsed() {
+			minRespIdx = k
+		}
+	}
+	worker = &workers.Members[minRespIdx]
+	logger.LogDebug(minRespIdx, worker.respMS)
+	return worker, nil
 }
