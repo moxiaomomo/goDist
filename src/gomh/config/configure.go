@@ -1,18 +1,18 @@
 package config
 
 import (
-	"common"
-	"logger"
+	"gomh/util"
+	"gomh/util/logger"
 )
 
 type LBConfig struct {
-	LogLevel common.LogLevelEnum
-	LBPolicy common.LBPolicyEnum
+	LogLevel util.LogLevelEnum
+	LBPolicy util.LBPolicyEnum
 }
 
 var globalLBConfig LBConfig = LBConfig{
-	LogLevel: common.LOG_INFO,
-	LBPolicy: common.LB_RANDOM,
+	LogLevel: util.LOG_INFO,
+	LBPolicy: util.LB_RANDOM,
 }
 
 func GlobalLBConfig() LBConfig {
@@ -22,7 +22,7 @@ func GlobalLBConfig() LBConfig {
 func SetGlobalLBConfig(m map[string]interface{}) error {
 	var lastErr error = nil
 	for k, v := range m {
-		err := common.SetStructField(&globalLBConfig, k, v)
+		err := util.SetStructField(&globalLBConfig, k, v)
 		if err != nil {
 			lastErr = err
 			logger.LogErrorf("Set Config Failed: %s %v", k, v)

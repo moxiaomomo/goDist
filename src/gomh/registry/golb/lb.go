@@ -1,10 +1,10 @@
 package golb
 
 import (
-	"common"
-	"config"
 	"errors"
-	"logger"
+	"gomh/config"
+	"gomh/util"
+	"gomh/util/logger"
 	"math/rand"
 	"sync"
 	"time"
@@ -47,7 +47,7 @@ func NewWorkers() Workers {
 	}
 }
 
-func SetLBPolicy(p common.LBPolicyEnum) {
+func SetLBPolicy(p util.LBPolicyEnum) {
 	config.SetGlobalLBConfig(map[string]interface{}{"LBPolicy": p})
 }
 
@@ -127,7 +127,7 @@ func RemoveWorkerAsTimeout() {
 			now := time.Now().Unix()
 			for k, v := range workers.Members {
 				// timeout after twice heartbeat interval
-				if now-v.Heartbeat > common.HEARTBEAT_INTERVAL*2 {
+				if now-v.Heartbeat > util.HEARTBEAT_INTERVAL*2 {
 					if k == len(workers.Members)-1 {
 						workers.Members = workers.Members[:k]
 					} else {
@@ -144,9 +144,9 @@ func RemoveWorkerAsTimeout() {
 
 func GetWorker() (*Worker, error) {
 	switch config.GlobalLBConfig().LBPolicy {
-	case common.LB_ROUNDROBIN:
+	case util.LB_ROUNDROBIN:
 		return RoundRobinWorker()
-	case common.LB_FASTRESP:
+	case util.LB_FASTRESP:
 		return FastResponseWorker()
 	default:
 		return RandomWorker()

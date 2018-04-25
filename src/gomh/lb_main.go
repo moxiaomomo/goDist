@@ -1,10 +1,10 @@
 package main
 
 import (
-	"common"
 	"encoding/json"
-	"golb"
-	"logger"
+	"gomh/registry/golb"
+	"gomh/util"
+	"gomh/util/logger"
 	"net/http"
 	"time"
 )
@@ -22,8 +22,8 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 		logger.LogInfof("Suc to register worker: %s\n", host)
 	}
 
-	regResp := common.CommonResp{
-		Code:    common.REG_WORKER_OK,
+	regResp := util.CommonResp{
+		Code:    util.REG_WORKER_OK,
 		Message: "ok",
 	}
 	respBody, err := json.Marshal(regResp)
@@ -44,8 +44,8 @@ func RemoveHandler(w http.ResponseWriter, r *http.Request) {
 
 	golb.RemoveWorker(golb.Worker{Host: host})
 
-	regResp := common.CommonResp{
-		Code:    common.REG_WORKER_OK,
+	regResp := util.CommonResp{
+		Code:    util.REG_WORKER_OK,
 		Message: "ok",
 	}
 	respBody, err := json.Marshal(regResp)
@@ -57,11 +57,11 @@ func RemoveHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	logger.SetLogLevel(common.LOG_INFO)
+	logger.SetLogLevel(util.LOG_INFO)
 
 	go golb.RemoveWorkerAsTimeout()
 	golb.InitHandlers()
-	golb.SetLBPolicy(common.LB_FASTRESP)
+	golb.SetLBPolicy(util.LB_FASTRESP)
 
 	http.HandleFunc("/add", AddHandler)
 	http.HandleFunc("/remove", RemoveHandler)

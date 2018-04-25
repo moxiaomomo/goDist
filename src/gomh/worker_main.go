@@ -2,16 +2,15 @@ package main
 
 import (
 	"bytes"
-	"common"
 	"flag"
 	"fmt"
+	"gomh/server"
+	"gomh/util"
+	"gomh/util/logger"
 	"io"
-	"logger"
 	"net"
 	"os"
 	"strconv"
-	"util"
-	"worker"
 
 	"google.golang.org/grpc"
 )
@@ -36,7 +35,7 @@ func handler(conn *net.Conn) error {
 
 func main() {
 	flag.Parse()
-	logger.SetLogLevel(common.LOG_INFO)
+	logger.SetLogLevel(util.LOG_INFO)
 
 	portInt, err := strconv.Atoi(*port)
 	if err != nil {
@@ -56,7 +55,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	err = worker.Register(lip, portInt)
+	err = server.Register(lip, portInt)
 	if err != nil {
 		logger.LogError(err.Error())
 		os.Exit(-1)
@@ -66,6 +65,6 @@ func main() {
 
 	logger.LogInfof("to run server on port: %d\n", portInt)
 	svr := grpc.NewServer()
-	worker.RegisterGreeterServer(svr)
+	server.RegisterGreeterServer(svr)
 	svr.Serve(ln)
 }

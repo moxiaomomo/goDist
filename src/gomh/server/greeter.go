@@ -1,8 +1,8 @@
-package worker
+package server
 
 import (
-	"logger"
-	pb "proto/greeter"
+	pb "gomh/proto/greeter"
+	"gomh/util/logger"
 	//	"time"
 
 	"golang.org/x/net/context"

@@ -1,9 +1,9 @@
 package golb
 
 import (
-	"logger"
+	pb "gomh/proto/greeter"
+	"gomh/util/logger"
 	"net/http"
-	pb "proto/greeter"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"

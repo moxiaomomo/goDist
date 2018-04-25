@@ -1,18 +1,18 @@
 package logger
 
 import (
-	"common"
 	"fmt"
+	"gomh/util"
 )
 
-var logLevel common.LogLevelEnum = common.LOG_INFO
+var logLevel util.LogLevelEnum = util.LOG_INFO
 
-func SetLogLevel(level common.LogLevelEnum) {
+func SetLogLevel(level util.LogLevelEnum) {
 	logLevel = level
 }
 
 func LogDebug(a ...interface{}) (n int, err error) {
-	if logLevel > common.LOG_DEBUG {
+	if logLevel > util.LOG_DEBUG {
 		return 0, nil
 	}
 	fmt.Print("[DEBUG]")
@@ -20,7 +20,7 @@ func LogDebug(a ...interface{}) (n int, err error) {
 }
 
 func LogInfo(a ...interface{}) (n int, err error) {
-	if logLevel > common.LOG_INFO {
+	if logLevel > util.LOG_INFO {
 		return 0, nil
 	}
 	fmt.Print("[INFO]")
@@ -28,7 +28,7 @@ func LogInfo(a ...interface{}) (n int, err error) {
 }
 
 func LogWarn(a ...interface{}) (n int, err error) {
-	if logLevel > common.LOG_WARN {
+	if logLevel > util.LOG_WARN {
 		return 0, nil
 	}
 	fmt.Print("[WARN]")
@@ -41,7 +41,7 @@ func LogError(a ...interface{}) (n int, err error) {
 }
 
 func LogDebugf(format string, a ...interface{}) (n int, err error) {
-	if logLevel > common.LOG_DEBUG {
+	if logLevel > util.LOG_DEBUG {
 		return 0, nil
 	}
 	fmt.Print("[DEBUG]")
@@ -49,7 +49,7 @@ func LogDebugf(format string, a ...interface{}) (n int, err error) {
 }
 
 func LogInfof(format string, a ...interface{}) (n int, err error) {
-	if logLevel > common.LOG_INFO {
+	if logLevel > util.LOG_INFO {
 		return 0, nil
 	}
 	fmt.Print("[INFO]")
@@ -57,7 +57,7 @@ func LogInfof(format string, a ...interface{}) (n int, err error) {
 }
 
 func LogWarnf(format string, a ...interface{}) (n int, err error) {
-	if logLevel > common.LOG_WARN {
+	if logLevel > util.LOG_WARN {
 		return 0, nil
 	}
 	fmt.Print("[WARN]")
