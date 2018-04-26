@@ -9,7 +9,7 @@ const (
 	REG_WORKER_OK     = 0
 	REG_WORKER_FAILED = -1
 
-	HEARTBEAT_INTERVAL = 5
+	HEARTBEAT_INTERVAL = 10
 )
 
 type CommonResp struct {

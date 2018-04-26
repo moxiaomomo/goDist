@@ -1,4 +1,4 @@
-package server
+package util
 
 import (
 	"encoding/json"
@@ -13,25 +13,27 @@ import (
 
 var regClient = &http.Client{Timeout: 10 * time.Second}
 
-func Register(host string, port int) error {
+func Register(host string, port int, uripath string, svrHost string) error {
 	go func() {
 		for {
 			time.Sleep(time.Second * util.HEARTBEAT_INTERVAL)
-			err := reportHeartbeat(host, port)
+			err := reportHeartbeat(host, port, uripath, svrHost)
 			if err != nil {
 				logger.LogErrorf("Send heartbeat failed: %s\n", err.Error())
 			}
 
 		}
 	}()
-	return reportHeartbeat(host, port)
+	return reportHeartbeat(host, port, uripath, svrHost)
 }
 
-func reportHeartbeat(host string, port int) error {
+func reportHeartbeat(host string, port int, uripath string, svrHost string) error {
 	data := make(url.Values)
 	data["host"] = []string{fmt.Sprintf("%s:%d", host, port)}
+	data["uripath"] = []string{uripath}
 
-	resp, err := regClient.PostForm("http://127.0.0.1:8088/add", data)
+	url := fmt.Sprintf("http://%s/add", svrHost)
+	resp, err := regClient.PostForm(url, data)
 	if err != nil {
 		return err
 	}

@@ -2,16 +2,20 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
-	"gomh/server"
+	"gomh/server/greeter"
+	sutil "gomh/server/util"
 	"gomh/util"
 	"gomh/util/logger"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"strconv"
 
+	"github.com/tidwall/gjson"
 	"google.golang.org/grpc"
 )
 
@@ -33,7 +37,27 @@ func handler(conn *net.Conn) error {
 	return nil
 }
 
+func LoadConfig(confPath string) (map[string]interface{}, string, error) {
+	cfg, err := ioutil.ReadFile(confPath)
+	if err != nil {
+		fmt.Printf("LoadConfig failed, err:%s\n", err.Error())
+		return nil, "", err
+	}
+	m, ok := gjson.Parse(string(cfg)).Value().(map[string]interface{})
+	if !ok {
+		return nil, "", errors.New("Parse config failed.")
+	}
+	logger.LogInfof("config:%+v\n", m)
+	return m, string(cfg), nil
+}
+
 func main() {
+	cfg, cfgraw, err := LoadConfig("config/reg.conf")
+	if err != nil {
+		logger.LogErrorf("Program will exit while loading config failed.")
+		os.Exit(1)
+	}
+
 	flag.Parse()
 	logger.SetLogLevel(util.LOG_INFO)
 
@@ -55,7 +79,10 @@ func main() {
 		os.Exit(-1)
 	}
 
-	err = server.Register(lip, portInt)
+	svrnode := gjson.Get(cfgraw, "nodes").Array()[0]
+	fmt.Printf("%+v\n", svrnode)
+	svrHost := fmt.Sprintf("%s:%s", svrnode.String(), cfg["listenport"])
+	err = sutil.Register(lip, portInt, "/hello", svrHost)
 	if err != nil {
 		logger.LogError(err.Error())
 		os.Exit(-1)
@@ -65,6 +92,6 @@ func main() {
 
 	logger.LogInfof("to run server on port: %d\n", portInt)
 	svr := grpc.NewServer()
-	server.RegisterGreeterServer(svr)
+	greeter.RegisterGreeterServer(svr)
 	svr.Serve(ln)
 }

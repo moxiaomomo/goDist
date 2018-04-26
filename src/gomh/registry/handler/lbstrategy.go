@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"gomh/config"
 	"gomh/util"
 	"gomh/util/logger"
@@ -16,7 +17,8 @@ var (
 )
 
 type Worker struct {
-	Heartbeat int64 // last heartbeat timestamp
+	Heartbeat int64  // last heartbeat timestamp
+	UriPath   string // api request uripath
 	Host      string
 	callCount int
 	respMS    int // average response time in microsecond
@@ -24,7 +26,7 @@ type Worker struct {
 }
 
 type Workers struct {
-	Members     []Worker
+	Members     map[string][]Worker
 	lastRRIndex int
 	sync.Mutex
 }
@@ -44,6 +46,7 @@ func NewWorker() *Worker {
 func NewWorkers() Workers {
 	return Workers{
 		lastRRIndex: 0,
+		Members:     make(map[string][]Worker, 0),
 	}
 }
 
@@ -53,7 +56,7 @@ func SetLBPolicy(p util.LBPolicyEnum) {
 
 func (w *Worker) IsEqual(nw interface{}) bool {
 	if cmpnw, ok := nw.(Worker); ok {
-		return w.Host == cmpnw.Host
+		return w.Host == cmpnw.Host && w.UriPath == cmpnw.UriPath
 	}
 	return false
 }
@@ -91,13 +94,19 @@ func AddWorker(w Worker) error {
 	workers.Mutex.Lock()
 	defer workers.Mutex.Unlock()
 
-	for i := 0; i < len(workers.Members); i++ {
-		if workers.Members[i].IsEqual(w) {
-			workers.Members[i].Heartbeat = w.Heartbeat
-			return ERR_WORKER_EXISTS
+	mlist, ok := workers.Members[w.UriPath]
+	if ok {
+		for i := 0; i < len(mlist); i++ {
+			if mlist[i].IsEqual(w) {
+				mlist[i].Heartbeat = w.Heartbeat
+				return ERR_WORKER_EXISTS
+			}
 		}
+	} else {
+		workers.Members[w.UriPath] = make([]Worker, 0)
 	}
-	workers.Members = append(workers.Members, w)
+
+	workers.Members[w.UriPath] = append(workers.Members[w.UriPath], w)
 	return nil
 }
 
@@ -105,12 +114,17 @@ func RemoveWorker(w Worker) error {
 	workers.Mutex.Lock()
 	defer workers.Mutex.Unlock()
 
-	for k, v := range workers.Members {
+	mlist, ok := workers.Members[w.UriPath]
+	if !ok {
+		return ERR_WORKER_NOT_EXISTS
+	}
+
+	for k, v := range mlist {
 		if v.IsEqual(w) {
-			if k == len(workers.Members)-1 {
-				workers.Members = workers.Members[:k]
+			if k == len(mlist)-1 {
+				workers.Members[w.UriPath] = workers.Members[w.UriPath][:k]
 			} else {
-				workers.Members = append(workers.Members[:k], workers.Members[k+1:]...)
+				workers.Members[w.UriPath] = append(workers.Members[w.UriPath][:k], workers.Members[w.UriPath][k+1:]...)
 			}
 			return nil
 		}
@@ -125,15 +139,18 @@ func RemoveWorkerAsTimeout() {
 			defer workers.Mutex.Unlock()
 
 			now := time.Now().Unix()
-			for k, v := range workers.Members {
-				// timeout after twice heartbeat interval
-				if now-v.Heartbeat > util.HEARTBEAT_INTERVAL*2 {
-					if k == len(workers.Members)-1 {
-						workers.Members = workers.Members[:k]
-					} else {
-						workers.Members = append(workers.Members[:k], workers.Members[k+1:]...)
+			for k1, v1 := range workers.Members {
+				for k, v := range v1 {
+					fmt.Printf("%+v\n", v1)
+					// timeout after twice heartbeat interval
+					if now-v.Heartbeat > util.HEARTBEAT_INTERVAL*2 {
+						if k == len(workers.Members[k1])-1 {
+							workers.Members[k1] = workers.Members[k1][:k]
+						} else {
+							workers.Members[k1] = append(workers.Members[k1][:k], workers.Members[k1][k+1:]...)
+						}
+						logger.LogWarnf("Lost heartbeat from worker: %s\n", v.Host)
 					}
-					logger.LogWarnf("Lost heartbeat from worker: %s", v.Host)
 				}
 			}
 		}()
@@ -142,67 +159,68 @@ func RemoveWorkerAsTimeout() {
 	}
 }
 
-func GetWorker() (*Worker, error) {
+func GetWorker(uripath string) (*Worker, error) {
 	switch config.GlobalLBConfig().LBPolicy {
 	case util.LB_ROUNDROBIN:
-		return RoundRobinWorker()
+		return RoundRobinWorker(uripath)
 	case util.LB_FASTRESP:
-		return FastResponseWorker()
+		return FastResponseWorker(uripath)
 	default:
-		return RandomWorker()
+		return RandomWorker(uripath)
 	}
 }
 
-func RandomWorker() (*Worker, error) {
+func RandomWorker(uripath string) (*Worker, error) {
 	workers.Mutex.Lock()
 	defer workers.Mutex.Unlock()
 
+	mlist, ok := workers.Members[uripath]
 	var worker = NewWorker()
-
-	if len(workers.Members) <= 0 {
+	if !ok || len(mlist) <= 0 {
 		return worker, errors.New("Empty workers")
 	}
+
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	worker = &workers.Members[r.Intn(len(workers.Members))]
+	worker = &mlist[r.Intn(len(mlist))]
 	return worker, nil
 }
 
-func RoundRobinWorker() (*Worker, error) {
+func RoundRobinWorker(uripath string) (*Worker, error) {
 	workers.Mutex.Lock()
 	defer workers.Mutex.Unlock()
 
+	mlist, ok := workers.Members[uripath]
 	var worker = NewWorker()
-
-	if len(workers.Members) <= 0 {
+	if !ok || len(mlist) <= 0 {
 		return worker, errors.New("Empty workers")
 	}
 
 	defer func() {
-		workers.lastRRIndex = (workers.lastRRIndex + 1) % len(workers.Members)
+		workers.lastRRIndex = (workers.lastRRIndex + 1) % len(mlist)
 	}()
-	index := workers.lastRRIndex % len(workers.Members)
-	worker = &workers.Members[index]
+	index := workers.lastRRIndex % len(mlist)
+	worker = &mlist[index]
 	logger.LogDebug(index, worker.respMS)
 	return worker, nil
 }
 
-func FastResponseWorker() (*Worker, error) {
+func FastResponseWorker(uripath string) (*Worker, error) {
 	workers.Mutex.Lock()
 	defer workers.Mutex.Unlock()
 
+	mlist, ok := workers.Members[uripath]
 	var worker = NewWorker()
-
-	if len(workers.Members) <= 0 {
+	if !ok || len(mlist) <= 0 {
 		return worker, errors.New("Empty workers")
 	}
 
 	var minRespIdx int = 0
-	for k, v := range workers.Members {
-		if v.ResponseTimeUsed() < workers.Members[minRespIdx].ResponseTimeUsed() {
+	for k, v := range mlist {
+		if v.ResponseTimeUsed() < mlist[minRespIdx].ResponseTimeUsed() {
 			minRespIdx = k
 		}
 	}
-	worker = &workers.Members[minRespIdx]
+	worker = &mlist[minRespIdx]
 	logger.LogDebug(minRespIdx, worker.respMS)
 	return worker, nil
 }

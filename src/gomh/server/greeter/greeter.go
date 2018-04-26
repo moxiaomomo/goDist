@@ -1,4 +1,4 @@
-package server
+package greeter
 
 import (
 	pb "gomh/proto/greeter"

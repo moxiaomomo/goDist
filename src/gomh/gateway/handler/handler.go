@@ -3,8 +3,11 @@ package handler
 import (
 	pb "gomh/proto/greeter"
 	"gomh/util/logger"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 
+	"github.com/tidwall/gjson"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -15,15 +18,21 @@ func InitHandlers() {
 
 func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	logger.LogDebug("To call SayHello.")
-	worker, err := GetWorker()
+
+	url, _ := url.Parse("http://127.0.0.1:8338?uripath=/hello")
+	workRes, err := http.Get(url.String())
 	if err != nil {
 		w.Write([]byte("out of service."))
 		return
 	}
+	result, _ := ioutil.ReadAll(workRes.Body)
+	workRes.Body.Close()
+	svrHost := gjson.Get(string(result), "data").Get("host").String()
+	logger.LogInfof("togrpc:%+v %s\v", string(result), svrHost)
 
-	timer := ProcTimer{}
-	timer.OnStart()
-	conn, err := grpc.Dial(worker.HostToCall(), grpc.WithInsecure())
+	//	timer := ProcTimer{}
+	//	timer.OnStart()
+	conn, err := grpc.Dial(svrHost, grpc.WithInsecure())
 	if err != nil {
 		logger.LogError("grpc call failed.")
 		w.Write([]byte("internel server error."))
@@ -37,13 +46,20 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 		Message: "just4fun",
 	}
 	resp, err := client.SayHello(context.Background(), &reqbody)
-	timer.OnEnd()
+	//	timer.OnEnd()
 	if err != nil {
 		logger.LogError("call sayhello failed.")
 		w.Write([]byte("internel server error."))
 		return
 	}
 
-	worker.AsTaskFinished(timer.Duration())
+	//	worker.AsTaskFinished(timer.Duration())
 	w.Write([]byte(resp.Message))
+}
+
+func StartGatewayServer(listenHost string) {
+	InitHandlers()
+
+	logger.LogInfof("to start server on port: %s\n", listenHost)
+	http.ListenAndServe(listenHost, nil)
 }
