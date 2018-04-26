@@ -1,4 +1,4 @@
-package golb
+package handler
 
 import (
 	pb "gomh/proto/greeter"

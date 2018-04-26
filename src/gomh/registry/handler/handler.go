@@ -1,8 +1,7 @@
-package main
+package handler
 
 import (
 	"encoding/json"
-	"gomh/registry/golb"
 	"gomh/util"
 	"gomh/util/logger"
 	"net/http"
@@ -17,7 +16,7 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	host := r.Form["host"][0]
 
-	regErr := golb.AddWorker(golb.Worker{Host: host, Heartbeat: time.Now().Unix()})
+	regErr := AddWorker(Worker{Host: host, Heartbeat: time.Now().Unix()})
 	if regErr == nil {
 		logger.LogInfof("Suc to register worker: %s\n", host)
 	}
@@ -42,7 +41,7 @@ func RemoveHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	host := r.Form["host"][0]
 
-	golb.RemoveWorker(golb.Worker{Host: host})
+	RemoveWorker(Worker{Host: host})
 
 	regResp := util.CommonResp{
 		Code:    util.REG_WORKER_OK,
@@ -56,16 +55,15 @@ func RemoveHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(respBody)
 }
 
-func main() {
+func StartRegistryServer(listenHost string) {
 	logger.SetLogLevel(util.LOG_INFO)
 
-	go golb.RemoveWorkerAsTimeout()
-	golb.InitHandlers()
-	golb.SetLBPolicy(util.LB_FASTRESP)
+	go RemoveWorkerAsTimeout()
+	SetLBPolicy(util.LB_FASTRESP)
 
 	http.HandleFunc("/add", AddHandler)
 	http.HandleFunc("/remove", RemoveHandler)
 
-	logger.LogInfo("to start server on port: 8088")
-	http.ListenAndServe(":8088", nil)
+	logger.LogInfof("to start server on port: %s\n", listenHost)
+	http.ListenAndServe(listenHost, nil)
 }
