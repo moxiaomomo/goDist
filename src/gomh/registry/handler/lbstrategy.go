@@ -2,7 +2,7 @@ package handler
 
 import (
 	"errors"
-	"fmt"
+	//	"fmt"
 	"gomh/config"
 	"gomh/util"
 	"gomh/util/logger"
@@ -141,7 +141,7 @@ func RemoveWorkerAsTimeout() {
 			now := time.Now().Unix()
 			for k1, v1 := range workers.Members {
 				for k, v := range v1 {
-					fmt.Printf("%+v\n", v1)
+					//fmt.Printf("%+v\n", v1)
 					// timeout after twice heartbeat interval
 					if now-v.Heartbeat > util.HEARTBEAT_INTERVAL*2 {
 						if k == len(workers.Members[k1])-1 {
@@ -176,6 +176,7 @@ func RandomWorker(uripath string) (*Worker, error) {
 
 	mlist, ok := workers.Members[uripath]
 	var worker = NewWorker()
+	//	fmt.Printf("%s %d %d\n", uripath, mlist, ok)
 	if !ok || len(mlist) <= 0 {
 		return worker, errors.New("Empty workers")
 	}

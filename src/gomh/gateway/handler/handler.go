@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	pb "gomh/proto/greeter"
 	"gomh/util/logger"
 	"io/ioutil"
@@ -19,7 +20,9 @@ func InitHandlers() {
 func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	logger.LogDebug("To call SayHello.")
 
-	url, _ := url.Parse("http://127.0.0.1:8338?uripath=/hello")
+	url, _ := url.Parse("http://127.0.0.1:8338/get?uripath=/hello")
+
+	fmt.Println(url.String())
 	workRes, err := http.Get(url.String())
 	if err != nil {
 		w.Write([]byte("out of service."))
