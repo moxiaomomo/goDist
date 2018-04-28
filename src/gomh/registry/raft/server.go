@@ -3,7 +3,12 @@ package raft
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	//	"golang.org/x/net/context"
+	pb "gomh/registry/raft/proto"
+	"google.golang.org/grpc"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
 	"sync"
@@ -91,10 +96,24 @@ func (s *server) Start() error {
 	loopch := make(chan int)
 	go func() {
 		defer func() { loopch <- 1 }()
-		s.loop()
+		s.acceptVoteRequest()
 	}()
-	<-loopch
+	s.loop()
 	return nil
+}
+
+func (s *server) acceptVoteRequest() {
+	server := grpc.NewServer()
+	pb.RegisterRequestVoteServer(server, &RequestVoteImp{})
+
+	address, err := net.Listen("tcp", ":3000")
+	if err != nil {
+		panic(err)
+	}
+
+	if err := server.Serve(address); err != nil {
+		panic(err)
+	}
 }
 
 func (s *server) loadConf() error {
@@ -116,8 +135,31 @@ func (s *server) loadConf() error {
 }
 
 func (s *server) loop() {
-	for i := 0; i < 5; i++ {
-		time.Sleep(1 * time.Second)
-		fmt.Println(i)
+	t := time.NewTimer(time.Duration(150+rand.Intn(150)) * time.Millisecond)
+	for {
+		select {
+		case <-t.C:
+			// if s.state == Candidate
+			s.tryRequestVote()
+			t.Reset(time.Duration(150+rand.Intn(150)) * time.Millisecond)
+		case isStop := <-s.stopped:
+			if isStop {
+				s.state = Stopped
+				break
+			}
+		}
 	}
+}
+
+func (s *server) tryRequestVote() {
+	r := &RequestVoteRequest{
+		peer: &Peer{
+			Host: "127.0.0.1:3001",
+		},
+		Term:          3,
+		LastLogIndex:  2,
+		LastLogTerm:   2,
+		CandidateName: "xiaomo1",
+	}
+	RequestVoteMeCli(r)
 }

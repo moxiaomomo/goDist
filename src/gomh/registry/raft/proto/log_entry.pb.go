@@ -43,7 +43,7 @@ type LogRequest struct {
 func (m *LogRequest) Reset()                    { *m = LogRequest{} }
 func (m *LogRequest) String() string            { return proto1.CompactTextString(m) }
 func (*LogRequest) ProtoMessage()               {}
-func (*LogRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (*LogRequest) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{0} }
 
 func (m *LogRequest) GetIndex() uint64 {
 	if m != nil {
@@ -174,9 +174,9 @@ var _LogEntry_serviceDesc = grpc.ServiceDesc{
 	Metadata: "log_entry.proto",
 }
 
-func init() { proto1.RegisterFile("log_entry.proto", fileDescriptor0) }
+func init() { proto1.RegisterFile("log_entry.proto", fileDescriptor1) }
 
-var fileDescriptor0 = []byte{
+var fileDescriptor1 = []byte{
 	// 205 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x4c, 0x8f, 0xb1, 0x4e, 0x85, 0x30,
 	0x14, 0x86, 0xad, 0x72, 0xf5, 0x7a, 0x2e, 0xc6, 0x78, 0xe2, 0xd0, 0x30, 0x35, 0x4c, 0x4c, 0x0c,
