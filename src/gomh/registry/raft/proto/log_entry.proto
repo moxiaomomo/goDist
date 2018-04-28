@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package proto;
+
+service LogEntry {
+    rpc SendLogEntry(LogRequest) returns (LogResponse) {}
+}
+
+message LogRequest {
+    uint64 index = 1;
+    uint64 term = 2;
+    string commandname = 3;
+    bytes command = 4;
+}
+
+message LogResponse {
+    uint32 respcode = 1;
+    bytes respmsg = 2;
+}

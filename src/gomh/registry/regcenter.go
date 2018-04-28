@@ -31,6 +31,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	listenHost := fmt.Sprintf("%s:%s", cfg["listenhost"], cfg["listenport"])
-	handler.StartRegistryServer(listenHost)
+	//	listenHost := fmt.Sprintf("%s:%s", cfg["listenhost"], cfg["listenport"])
+	handler.StartRegistryServer(cfg["listenAt"].(string))
 }
