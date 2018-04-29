@@ -26,8 +26,11 @@ type server struct {
 	state       string
 	currentTerm uint64
 
-	transporter Transporter
-	log         *Log
+	transporter    Transporter
+	log            *Log
+	conf           *Config
+	peers          map[string]*Peer
+	voteGrantedNum int
 }
 
 type Server interface {
@@ -91,7 +94,7 @@ func (s *server) Start() error {
 	}
 
 	s.stopped = make(chan bool)
-	s.state = Follower
+	s.state = Candidate
 
 	loopch := make(chan int)
 	go func() {
@@ -104,9 +107,10 @@ func (s *server) Start() error {
 
 func (s *server) acceptVoteRequest() {
 	server := grpc.NewServer()
-	pb.RegisterRequestVoteServer(server, &RequestVoteImp{})
+	pb.RegisterRequestVoteServer(server, &RequestVoteImp{server: s})
 
-	address, err := net.Listen("tcp", ":3000")
+	fmt.Printf("To listen on %s\n", s.conf.Host)
+	address, err := net.Listen("tcp", s.conf.Host)
 	if err != nil {
 		panic(err)
 	}
@@ -129,6 +133,15 @@ func (s *server) loadConf() error {
 	if err = json.Unmarshal(cfg, conf); err != nil {
 		return err
 	}
+	s.conf = conf
+	s.peers = make(map[string]*Peer)
+	for _, c := range s.conf.PeerHosts {
+		s.peers[c] = &Peer{
+			Name:             c,
+			Host:             c,
+			VoteRequestState: NotYetVote,
+		}
+	}
 
 	s.log.UpdateCommitIndex(conf.CommitIndex)
 	return nil
@@ -139,8 +152,11 @@ func (s *server) loop() {
 	for {
 		select {
 		case <-t.C:
-			// if s.state == Candidate
-			s.tryRequestVote()
+			if s.state == Candidate {
+				s.tryRequestVote()
+			} else {
+				fmt.Printf("current state:%s\n", s.state)
+			}
 			t.Reset(time.Duration(150+rand.Intn(150)) * time.Millisecond)
 		case isStop := <-s.stopped:
 			if isStop {
@@ -152,14 +168,18 @@ func (s *server) loop() {
 }
 
 func (s *server) tryRequestVote() {
-	r := &RequestVoteRequest{
-		peer: &Peer{
-			Host: "127.0.0.1:3001",
-		},
-		Term:          3,
-		LastLogIndex:  2,
-		LastLogTerm:   2,
-		CandidateName: "xiaomo1",
+	s.voteGrantedNum = 0
+	for _, p := range s.peers {
+		//		if p.VoteRequestState != NotYetVote {
+		//			continue
+		//		}
+		r := &RequestVoteRequest{
+			peer:          p,
+			Term:          3,
+			LastLogIndex:  2,
+			LastLogTerm:   2,
+			CandidateName: s.conf.CandidateName,
+		}
+		RequestVoteMeCli(s, r)
 	}
-	RequestVoteMeCli(r)
 }

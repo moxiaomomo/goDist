@@ -8,4 +8,8 @@ const (
 	Leader    = "leader"
 	Follower  = "follower"
 	Candidate = "candidate"
+
+	NotYetVote   = 0
+	VoteRejected = 1
+	VoteGranted  = 2
 )
