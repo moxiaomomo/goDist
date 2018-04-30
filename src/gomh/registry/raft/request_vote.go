@@ -33,8 +33,9 @@ func (e *RequestVoteImp) RequestVoteMe(ctx context.Context, req *proto.VoteReque
 	defer e.mutex.Unlock()
 
 	voteGranted := false
-	if e.server.state == Candidate {
+	if e.server.state == Candidate && !e.server.hasVoteLeader {
 		voteGranted = true
+		e.server.hasVoteLeader = true
 	}
 	pb := &proto.VoteResponse{
 		Term:        req.Term,
@@ -44,7 +45,6 @@ func (e *RequestVoteImp) RequestVoteMe(ctx context.Context, req *proto.VoteReque
 }
 
 func RequestVoteMeCli(s *server, req *RequestVoteRequest) {
-	fmt.Println("to request vote...")
 	conn, err := grpc.Dial(req.peer.Host, grpc.WithInsecure())
 	if err != nil {
 		fmt.Errorf("dail rpc failed, err: %s\n", err)

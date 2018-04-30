@@ -31,6 +31,7 @@ type server struct {
 	conf           *Config
 	peers          map[string]*Peer
 	voteGrantedNum int
+	hasVoteLeader  bool // vote one peer as a leader in curterm
 }
 
 type Server interface {
@@ -108,6 +109,7 @@ func (s *server) Start() error {
 func (s *server) acceptVoteRequest() {
 	server := grpc.NewServer()
 	pb.RegisterRequestVoteServer(server, &RequestVoteImp{server: s})
+	pb.RegisterAppendEntriesServer(server, &AppendEntriesImp{server: s})
 
 	fmt.Printf("To listen on %s\n", s.conf.Host)
 	address, err := net.Listen("tcp", s.conf.Host)
@@ -152,6 +154,7 @@ func (s *server) loop() {
 	for {
 		select {
 		case <-t.C:
+			s.hasVoteLeader = false
 			if s.state == Candidate {
 				s.tryRequestVote()
 			} else {
@@ -181,5 +184,17 @@ func (s *server) tryRequestVote() {
 			CandidateName: s.conf.CandidateName,
 		}
 		RequestVoteMeCli(s, r)
+	}
+	if s.state == Leader {
+		for _, p := range s.peers {
+			r := &AppendEntriesRequest{
+				peer:        p,
+				leaderName:  s.conf.Host,
+				leaderHost:  s.conf.Host,
+				term:        s.currentTerm + 100,
+				commitIndex: 100,
+			}
+			RequestAppendEntriesCli(s, r)
+		}
 	}
 }

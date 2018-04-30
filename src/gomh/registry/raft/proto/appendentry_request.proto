@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package proto;
+
+service AppendEntries {
+    rpc AppendEntries(AppendEntriesReuqest) returns (AppendEntriesResponse) {}
+}
+
+message AppendEntriesReuqest {
+    string LeaderName = 1;
+    string LeaderHost = 2;
+    uint64 Term = 3;
+    uint64 CommitIndex = 4;
+}
+
+message AppendEntriesResponse {
+    int32 ResponseCode = 1;
+}
