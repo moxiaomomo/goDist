@@ -81,7 +81,7 @@ type LogResponse struct {
 func (m *LogResponse) Reset()                    { *m = LogResponse{} }
 func (m *LogResponse) String() string            { return proto1.CompactTextString(m) }
 func (*LogResponse) ProtoMessage()               {}
-func (*LogResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
+func (*LogResponse) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{1} }
 
 func (m *LogResponse) GetRespcode() uint32 {
 	if m != nil {

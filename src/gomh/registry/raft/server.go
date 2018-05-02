@@ -6,6 +6,7 @@ import (
 	"net"
 	//	"golang.org/x/net/context"
 	pb "gomh/registry/raft/proto"
+	"gomh/util"
 	"google.golang.org/grpc"
 	"io/ioutil"
 	"math/rand"
@@ -21,32 +22,38 @@ type server struct {
 	mutex   sync.RWMutex
 	stopped chan bool
 
-	name        string
-	path        string
-	state       string
-	currentTerm uint64
-	confPath    string
+	name          string
+	path          string
+	state         string
+	currentLeader string
+	currentTerm   uint64
+	confPath      string
 
 	transporter    Transporter
 	log            *Log
 	conf           *Config
 	peers          map[string]*Peer
 	voteGrantedNum int
-	hasVoteLeader  bool // vote one peer as a leader in curterm
+	votedForTerm   uint64 // vote one peer as a leader in curterm
+
+	leaderAcceptTime  int64
+	heartbeatInterval int64
 }
 
 type Server interface {
 	Start() error
 	IsRunning() bool
+	State() string
 }
 
 func NewServer(name, path, confPath string) (Server, error) {
 	s := &server{
-		name:     name,
-		path:     path,
-		confPath: confPath,
-		state:    Stopped,
-		log:      newLog(),
+		name:              name,
+		path:              path,
+		confPath:          confPath,
+		state:             Stopped,
+		log:               newLog(),
+		heartbeatInterval: 1000, // 1000ms
 	}
 	return s, nil
 }
@@ -59,15 +66,29 @@ func (s *server) IsRunning() bool {
 	return ok
 }
 
+func (s *server) State() string {
+	//	s.mutex.Lock()
+	//	defer s.mutex.Unlock()
+
+	return s.state
+}
+
+func (s *server) SetState(state string) {
+	//	s.mutex.Lock()
+	//	defer s.mutex.Unlock()
+
+	s.state = state
+}
+
 func (s *server) Init() error {
 	if s.IsRunning() {
-		return fmt.Errorf("server has been running with state:%d", s.state)
+		return fmt.Errorf("server has been running with state:%d", s.State())
 	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if s.state == Initiated {
-		s.state = Initiated
+	if s.State() == Initiated {
+		s.SetState(Initiated)
 		return nil
 	}
 
@@ -83,13 +104,13 @@ func (s *server) Init() error {
 
 	_, s.currentTerm = s.log.LastInfo()
 
-	s.state = Initiated
+	s.SetState(Initiated)
 	return nil
 }
 
 func (s *server) Start() error {
 	if s.IsRunning() {
-		return fmt.Errorf("server has been running with state:%d", s.state)
+		return fmt.Errorf("server has been running with state:%d", s.State())
 	}
 
 	if err := s.Init(); err != nil {
@@ -97,7 +118,8 @@ func (s *server) Start() error {
 	}
 
 	s.stopped = make(chan bool)
-	s.state = Candidate
+
+	s.SetState(Follower)
 
 	loopch := make(chan int)
 	go func() {
@@ -112,6 +134,7 @@ func (s *server) acceptVoteRequest() {
 	server := grpc.NewServer()
 	pb.RegisterRequestVoteServer(server, &RequestVoteImp{server: s})
 	pb.RegisterAppendEntriesServer(server, &AppendEntriesImp{server: s})
+	pb.RegisterHeartbeatServer(server, &SendHeartbeatImp{server: s})
 
 	fmt.Printf("To listen on %s\n", s.conf.Host)
 	address, err := net.Listen("tcp", s.conf.Host)
@@ -155,54 +178,114 @@ func (s *server) loadConf() error {
 }
 
 func (s *server) loop() {
+	for s.State() != Stopped {
+		fmt.Printf("current state:%s, term:%d\n", s.State(), s.currentTerm)
+		switch s.State() {
+		case Follower:
+			s.followerLoop()
+		case Candidate:
+			s.candidateLoop()
+		case Leader:
+			s.leaderLoop()
+			//		case Snapshotting:
+			//			s.snapshotLoop()
+		}
+	}
+}
+
+func (s *server) candidateLoop() {
 	t := time.NewTimer(time.Duration(150+rand.Intn(150)) * time.Millisecond)
-	for {
+	for s.State() == Candidate {
 		select {
 		case <-t.C:
-			s.hasVoteLeader = false
-			if s.state == Candidate {
-				s.tryRequestVote()
-			} else {
-				fmt.Printf("current state:%s\n", s.state)
+			if s.State() != Candidate {
+				return
 			}
+			s.voteGrantedNum = 0
+			s.currentTerm += 1
+			for _, p := range s.peers {
+				r := &RequestVoteRequest{
+					peer:          p,
+					Term:          s.currentTerm,
+					LastLogIndex:  2,
+					LastLogTerm:   2,
+					CandidateName: s.conf.CandidateName,
+				}
+				RequestVoteMeCli(s, r)
+			}
+
 			t.Reset(time.Duration(150+rand.Intn(150)) * time.Millisecond)
 		case isStop := <-s.stopped:
 			if isStop {
-				s.state = Stopped
+				s.SetState(Stopped)
 				break
 			}
 		}
 	}
 }
 
-func (s *server) tryRequestVote() {
-	s.voteGrantedNum = 0
-	for _, p := range s.peers {
-		//		if p.VoteRequestState != NotYetVote {
-		//			continue
-		//		}
-		r := &RequestVoteRequest{
-			peer:          p,
-			Term:          3,
-			LastLogIndex:  2,
-			LastLogTerm:   2,
-			CandidateName: s.conf.CandidateName,
+func (s *server) followerLoop() {
+	t := time.NewTimer(time.Duration(s.heartbeatInterval) * time.Millisecond)
+	for s.State() == Follower {
+		select {
+		case <-t.C:
+			if s.State() != Follower {
+				return
+			}
+			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*2 {
+				s.SetState(Candidate)
+			}
+			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
+		case isStop := <-s.stopped:
+			if isStop {
+				s.SetState(Stopped)
+				break
+			}
 		}
-		RequestVoteMeCli(s, r)
 	}
-	if s.state == Leader {
-		for _, p := range s.peers {
-			if s.conf.Host == p.Host {
-				continue
+}
+
+func (s *server) leaderLoop() {
+	for _, p := range s.peers {
+		if s.conf.Host == p.Host {
+			continue
+		}
+		r := &AppendEntriesRequest{
+			peer:        p,
+			leaderName:  s.conf.Host,
+			leaderHost:  s.conf.Host,
+			term:        s.currentTerm,
+			commitIndex: 100,
+		}
+		RequestAppendEntriesCli(s, r)
+	}
+
+	t := time.NewTimer(time.Duration(s.heartbeatInterval) * time.Millisecond)
+	for s.State() == Leader {
+		select {
+		case <-t.C:
+			if s.State() != Leader {
+				return
 			}
-			r := &AppendEntriesRequest{
-				peer:        p,
-				leaderName:  s.conf.Host,
-				leaderHost:  s.conf.Host,
-				term:        s.currentTerm + 100,
-				commitIndex: 100,
+			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval {
+				for _, p := range s.peers {
+					if s.conf.Host == p.Host {
+						continue
+					}
+					r := &HeartbeatRequest{
+						peer: p,
+						host: s.conf.Host,
+						term: s.currentTerm,
+					}
+					SendHeartbeatCli(s, r)
+				}
 			}
-			RequestAppendEntriesCli(s, r)
+			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
+		case isStop := <-s.stopped:
+			if isStop {
+				s.SetState(Stopped)
+				break
+			}
 		}
 	}
 }

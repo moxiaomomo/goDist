@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"golang.org/x/net/context"
 	"gomh/registry/raft/proto"
+	"gomh/util"
 	"google.golang.org/grpc"
 	"sync"
 )
@@ -32,7 +33,11 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *proto.AppendE
 
 	resp := 0
 	if req.GetTerm() > e.server.currentTerm {
-		e.server.state = Follower
+		e.server.SetState(Follower)
+		e.server.currentTerm = req.GetTerm()
+		e.server.currentLeader = req.GetLeaderHost()
+		e.server.leaderAcceptTime = util.GetTimestampInMilli()
+
 		resp = 1
 		fmt.Printf("to be follower to %s\n", req.LeaderName)
 	}
@@ -63,11 +68,10 @@ func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest) {
 		fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
 		return
 	}
-	fmt.Printf("from:%s to:%s rpcRes:%+v\n", s.conf.Host, req.peer.Host, res)
+	fmt.Printf("[appendentry]from:%s to:%s rpcRes:%+v\n", s.conf.Host, req.peer.Host, res)
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	//TODO
-	fmt.Printf("AppendEntries resp: %+v\n", res)
 }
