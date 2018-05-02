@@ -25,6 +25,7 @@ type server struct {
 	path        string
 	state       string
 	currentTerm uint64
+	confPath    string
 
 	transporter    Transporter
 	log            *Log
@@ -39,12 +40,13 @@ type Server interface {
 	IsRunning() bool
 }
 
-func NewServer(name, path string) (Server, error) {
+func NewServer(name, path, confPath string) (Server, error) {
 	s := &server{
-		name:  name,
-		path:  path,
-		state: Stopped,
-		log:   newLog(),
+		name:     name,
+		path:     path,
+		confPath: confPath,
+		state:    Stopped,
+		log:      newLog(),
 	}
 	return s, nil
 }
@@ -124,6 +126,9 @@ func (s *server) acceptVoteRequest() {
 
 func (s *server) loadConf() error {
 	confpath := path.Join(s.path, "raft.cfg")
+	if s.confPath != "" {
+		confpath = path.Join(s.path, s.confPath)
+	}
 
 	cfg, err := ioutil.ReadFile(confpath)
 	if err != nil {
@@ -187,6 +192,9 @@ func (s *server) tryRequestVote() {
 	}
 	if s.state == Leader {
 		for _, p := range s.peers {
+			if s.conf.Host == p.Host {
+				continue
+			}
 			r := &AppendEntriesRequest{
 				peer:        p,
 				leaderName:  s.conf.Host,

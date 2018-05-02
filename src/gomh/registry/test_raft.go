@@ -1,13 +1,20 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"gomh/registry/raft"
 	"os"
 )
 
+var (
+	confPath = flag.String("confpath", "raft.cfg", "configuration filepath")
+)
+
 func main() {
-	raftsvr, err := raft.NewServer("testsvr", "raft")
+	flag.Parse()
+
+	raftsvr, err := raft.NewServer("testsvr", "raft", *confPath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
