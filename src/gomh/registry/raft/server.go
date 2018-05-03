@@ -44,6 +44,9 @@ type Server interface {
 	Start() error
 	IsRunning() bool
 	State() string
+
+	AddPeer(name string, connectionInfo string) error
+	RemovePeer(name string) error
 }
 
 func NewServer(name, path, confPath string) (Server, error) {
@@ -288,4 +291,36 @@ func (s *server) leaderLoop() {
 			}
 		}
 	}
+}
+
+func (s *server) AddPeer(name string, connectionInfo string) error {
+	if s.peers[name] != nil {
+		return nil
+	}
+
+	if s.name != name {
+		ti := time.Duration(s.heartbeatInterval) * time.Millisecond
+		peer := NewPeer(s, name, connectionInfo, ti)
+
+		s.peers[peer.Name] = peer
+	}
+
+	return nil
+}
+
+func (s *server) RemovePeer(name string) error {
+	if name == s.name {
+		return nil
+	}
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	peer := s.peers[name]
+	if peer == nil {
+		return nil
+	}
+
+	delete(s.peers, name)
+	return nil
 }

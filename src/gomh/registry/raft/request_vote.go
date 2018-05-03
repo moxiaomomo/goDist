@@ -69,6 +69,7 @@ func RequestVoteMeCli(s *server, req *RequestVoteRequest) {
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
 	if res.VoteGranted && s.State() == Candidate {
 		s.voteGrantedNum += 1
 		mostLen := int(math.Ceil(float64(len(s.conf.PeerHosts) / 2)))
