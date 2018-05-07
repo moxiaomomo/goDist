@@ -1,6 +1,8 @@
 package raft
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"sync"
 )
@@ -8,71 +10,90 @@ import (
 type Log struct {
 	ApplyFunc func(*LogEntry, Command) (interface{}, error)
 
-	mutex       sync.RWMutex
-	file        *os.File
-	path        string
-	entries     []*LogEntry
-	commitIndex uint64
-	startIndex  uint64
-	startTerm   uint64
+	mutex sync.RWMutex
+	file  *os.File
+	path  string
+	//	entries     []*LogEntry
+	//	units       []*LogUnit
+	entries     []*LogUnit
+	logIndexEnd uint64
 	initialized bool
 }
 
 func newLog() *Log {
 	log := &Log{
-		entries: make([]*LogEntry, 0),
+		//		entries: make([]*LogEntry, 0),
+		entries:     make([]*LogUnit, 0),
+		logIndexEnd: 0,
 	}
 	return log
 }
 
-func (l *Log) CurrentIndex() uint64 {
-	l.mutex.RLock()
-	defer l.mutex.RUnlock()
-	return l.currentIndex()
+func (l *Log) CurrentLogIndexEnd() uint64 {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.logIndexEnd
 }
 
-func (l *Log) currentIndex() uint64 {
-	if len(l.entries) == 0 {
-		return l.startIndex
-	}
-	return l.entries[len(l.entries)-1].Index()
-}
-
-func (l *Log) nextIndex() uint64 {
-	return l.currentIndex() + 1
-}
-
-func (l *Log) LastInfo() (index uint64, term uint64) {
+func (l *Log) LastCommitedInfo() (index uint64, term uint64) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
 	if len(l.entries) == 0 {
-		return l.startIndex, l.startTerm
+		return 0, 0
 	}
 
 	last := l.entries[len(l.entries)-1]
-	return last.Index(), last.Term()
+	return last.CurIndexStart, last.CurTerm
 }
 
-func (l *Log) currentTerm() uint64 {
-	l.mutex.RLock()
-	defer l.mutex.RUnlock()
-
-	if len(l.entries) == 0 {
-		return l.startTerm
-	}
-	return l.entries[len(l.entries)-1].Term()
-}
-
-func (l *Log) UpdateCommitIndex(index uint64) {
+func (l *Log) LogInit(path string) error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	if index > l.commitIndex {
-		l.commitIndex = index
+	var err error
+	l.file, err = os.OpenFile(path, os.O_RDWR, 0600)
+	l.path = path
+
+	if err != nil {
+		if os.IsNotExist(err) {
+			l.file, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0600)
+			if err == nil {
+				l.initialized = true
+			}
+			return err
+		}
+		return err
 	}
+
+	startIndex := int64(0)
+	for {
+		lunit := &LogUnit{}
+		startIndex, err = lunit.load(l.file, startIndex)
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return fmt.Errorf("Failed to recover raft.log: %v", err)
+			}
+		}
+		l.entries = append(l.entries, lunit)
+	}
+	l.logIndexEnd = uint64(startIndex)
+	l.initialized = true
+	return nil
 }
 
-func (l *Log) LogInit() {
+func (l *Log) Commite(lu *LogUnit, file *os.File) error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 
+	endidx, err := lu.dump(file)
+	if err != nil {
+		return err
+	}
+	l.entries = append(l.entries, lu)
+	l.logIndexEnd = uint64(endidx)
+	return nil
 }

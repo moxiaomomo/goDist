@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"encoding/json"
 	"fmt"
 	"golang.org/x/net/context"
 	"gomh/registry/raft/proto"
@@ -48,19 +49,28 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *proto.AppendE
 	return pb, nil
 }
 
-func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest) {
+func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest, lastindexstart, lastindexend, lastterm uint64) {
+	if s.State() != Leader {
+		fmt.Printf("only leader can request append entries.")
+		return
+	}
+
 	conn, err := grpc.Dial(req.peer.Host, grpc.WithInsecure())
 	if err != nil {
 		fmt.Printf("dail rpc failed, err: %s\n", err)
 		return
 	}
 
+	logunit := NewLogUnit(s.conf.CandidateName, req.term, lastterm, lastindexstart, lastindexend)
+	logunitd, _ := json.Marshal(logunit)
+	logunitb := []byte(logunitd)
+
 	client := proto.NewAppendEntriesClient(conn)
 	pb := &proto.AppendEntriesReuqest{
-		LeaderName:  s.conf.Host,
-		LeaderHost:  s.conf.Host,
-		Term:        req.term,
-		CommitIndex: 100,
+		LeaderName: s.conf.CandidateName,
+		LeaderHost: s.conf.Host,
+		Term:       req.term,
+		LogUnit:    logunitb,
 	}
 	res, err := client.AppendEntries(context.Background(), pb)
 
@@ -72,6 +82,12 @@ func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest) {
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	lindex, _ := s.log.LastCommitedInfo()
+	if res.ResponseCode == 1 && lindex == lastindexstart {
+		s.log.Commite(logunit, s.log.file)
+		fmt.Printf("to commit log, index:%s term:%s\n", lastindexstart, lastterm)
+	}
 
 	//TODO
 }

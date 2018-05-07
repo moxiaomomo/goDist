@@ -10,7 +10,7 @@ message AppendEntriesReuqest {
     string LeaderName = 1;
     string LeaderHost = 2;
     uint64 Term = 3;
-    uint64 CommitIndex = 4;
+    bytes LogUnit = 4;
 }
 
 message AppendEntriesResponse {

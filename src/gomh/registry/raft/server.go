@@ -95,7 +95,7 @@ func (s *server) Init() error {
 		return nil
 	}
 
-	err := os.Mkdir(path.Join(s.path, "snapshot"), 0700)
+	err := os.Mkdir(path.Join(s.path, "snapshot"), 0600)
 	if err != nil && !os.IsExist(err) {
 		return fmt.Errorf("raft initiation error: %s", err)
 	}
@@ -105,7 +105,17 @@ func (s *server) Init() error {
 		return fmt.Errorf("raft load config error: %s", err)
 	}
 
-	_, s.currentTerm = s.log.LastInfo()
+	logpath := path.Join(s.path, "internlog")
+	err = os.Mkdir(logpath, 0600)
+	if err != nil && !os.IsExist(err) {
+		return fmt.Errorf("raft-log initiation error: %s", err)
+	}
+	if err = s.log.LogInit(fmt.Sprintf("%s/%s%s", logpath, s.conf.LogPrefix, s.conf.CandidateName)); err != nil {
+		return fmt.Errorf("raft-log initiation error: %s", err)
+	}
+	fmt.Printf("%+v\n", s.log.entries)
+
+	_, s.currentTerm = s.log.LastCommitedInfo()
 
 	s.SetState(Initiated)
 	return nil
@@ -176,7 +186,6 @@ func (s *server) loadConf() error {
 		}
 	}
 
-	s.log.UpdateCommitIndex(conf.CommitIndex)
 	return nil
 }
 
@@ -249,6 +258,8 @@ func (s *server) followerLoop() {
 }
 
 func (s *server) leaderLoop() {
+	lindexstart, lterm := s.log.LastCommitedInfo()
+	lindexend := s.log.CurrentLogIndexEnd()
 	for _, p := range s.peers {
 		if s.conf.Host == p.Host {
 			continue
@@ -260,7 +271,7 @@ func (s *server) leaderLoop() {
 			term:        s.currentTerm,
 			commitIndex: 100,
 		}
-		RequestAppendEntriesCli(s, r)
+		RequestAppendEntriesCli(s, r, lindexstart, lindexend, lterm)
 	}
 
 	t := time.NewTimer(time.Duration(s.heartbeatInterval) * time.Millisecond)

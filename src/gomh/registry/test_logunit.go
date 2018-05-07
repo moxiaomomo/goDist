@@ -1,39 +1,35 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"gomh/registry/raft"
 	"os"
 )
 
 func main() {
-	file, err := os.OpenFile("/tmp/test0503.txt", os.O_CREATE|os.O_RDWR, os.ModePerm)
+	file, err := os.OpenFile("/data/apps/goDist/src/gomh/registry/raft/internlog/raft-log",
+		os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
-	//	data := &raft.LogUnit{
-	//		Leader:     "cdf898787",
-	//		StartIndex: 9,
-	//		Term:       4,
-	//	}
+	data := raft.NewLogUnit("cdf898787", 1, 2, 3, 4)
+	fmt.Println(data)
+	b, err := json.Marshal(data)
+	fmt.Println(b)
+	_, err = data.Dump(file)
+	fmt.Println(err)
 
-	//	err = data.Dump(file)
-	//	fmt.Println(err)
-	//
-	//	data = &raft.LogUnit{
-	//		Leader:     "cdf898787kkk",
-	//		StartIndex: 7,
-	//		Term:       7,
-	//	}
-	//
-	//	err = data.Dump(file)
-	//	fmt.Println(err)
+	data = raft.NewLogUnit("kokouiyi", 5, 6, 7, 8)
+	_, err = data.Dump(file)
+	fmt.Println(err)
 
 	file.Close()
 
-	file, err = os.OpenFile("/tmp/test0503.txt", os.O_RDWR, os.ModePerm)
+	file, err = os.OpenFile("/data/apps/goDist/src/gomh/registry/raft/internlog/raft-log",
+		os.O_RDWR, os.ModePerm)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
