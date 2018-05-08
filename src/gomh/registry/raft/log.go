@@ -71,6 +71,7 @@ func (l *Log) LogInit(path string) error {
 	for {
 		lunit := &LogUnit{}
 		startIndex, err = lunit.load(l.file, startIndex)
+
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -79,8 +80,8 @@ func (l *Log) LogInit(path string) error {
 			}
 		}
 		l.entries = append(l.entries, lunit)
+		l.logIndexEnd = uint64(startIndex)
 	}
-	l.logIndexEnd = uint64(startIndex)
 	l.initialized = true
 	return nil
 }

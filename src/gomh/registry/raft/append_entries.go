@@ -85,8 +85,8 @@ func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest, lastindexstar
 
 	lindex, _ := s.log.LastCommitedInfo()
 	if res.ResponseCode == 1 && lindex == lastindexstart {
+		fmt.Printf("to commit log, index:%d:%d term:%d\n", lastindexstart, lindex, lastterm)
 		s.log.Commite(logunit, s.log.file)
-		fmt.Printf("to commit log, index:%s term:%s\n", lastindexstart, lastterm)
 	}
 
 	//TODO
