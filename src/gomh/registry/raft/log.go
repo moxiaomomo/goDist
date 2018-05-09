@@ -16,6 +16,7 @@ type Log struct {
 	//	entries     []*LogEntry
 	//	units       []*LogUnit
 	entries     []*LogUnit
+	toc_entry   LogUnit
 	logIndexEnd uint64
 	initialized bool
 }
@@ -24,6 +25,7 @@ func newLog() *Log {
 	log := &Log{
 		//		entries: make([]*LogEntry, 0),
 		entries:     make([]*LogUnit, 0),
+		toc_entry:   LogUnit{},
 		logIndexEnd: 0,
 	}
 	return log

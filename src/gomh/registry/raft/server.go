@@ -9,6 +9,7 @@ import (
 	"gomh/util"
 	"google.golang.org/grpc"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"os"
 	"path"
@@ -36,14 +37,16 @@ type server struct {
 	voteGrantedNum int
 	votedForTerm   uint64 // vote one peer as a leader in curterm
 
-	leaderAcceptTime  int64
-	heartbeatInterval int64
+	leaderAcceptTime   int64
+	heartbeatInterval  int64
+	appendEntryRespCnt int
 }
 
 type Server interface {
 	Start() error
 	IsRunning() bool
 	State() string
+	CanCommitLog() bool
 
 	AddPeer(name string, connectionInfo string) error
 	RemovePeer(name string) error
@@ -59,6 +62,21 @@ func NewServer(name, path, confPath string) (Server, error) {
 		heartbeatInterval: 1000, // 1000ms
 	}
 	return s, nil
+}
+
+func (s *server) InitAppendEntry() {
+	s.appendEntryRespCnt = 0
+}
+
+func (s *server) IncrAppendEntryResp() {
+	s.appendEntryRespCnt += 1
+}
+
+func (s *server) CanCommitLog() bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	return s.appendEntryRespCnt >= int(math.Ceil(float64(len(s.peers)/2)))
 }
 
 func (s *server) IsRunning() bool {
@@ -258,6 +276,7 @@ func (s *server) followerLoop() {
 }
 
 func (s *server) leaderLoop() {
+	s.InitAppendEntry()
 	lindexstart, lterm := s.log.LastCommitedInfo()
 	lindexend := s.log.CurrentLogIndexEnd()
 	for _, p := range s.peers {
@@ -269,9 +288,30 @@ func (s *server) leaderLoop() {
 			leaderName:  s.conf.Host,
 			leaderHost:  s.conf.Host,
 			term:        s.currentTerm,
-			commitIndex: 100,
+			commitState: 0,
 		}
 		RequestAppendEntriesCli(s, r, lindexstart, lindexend, lterm)
+	}
+	if s.CanCommitLog() {
+		fmt.Printf("to commit log, index:%d:%d term:%d\n", lindexstart, lindexend, lterm)
+		logunit := NewLogUnit(s.conf.CandidateName, s.currentTerm, lterm, lindexstart, lindexend)
+		if err := s.log.Commite(logunit, s.log.file); err != nil {
+			fmt.Printf("CommiteLog Failed: %s\n", err)
+		} else {
+			for _, p := range s.peers {
+				if s.conf.Host == p.Host {
+					continue
+				}
+				r := &AppendEntriesRequest{
+					peer:        p,
+					leaderName:  s.conf.Host,
+					leaderHost:  s.conf.Host,
+					term:        s.currentTerm,
+					commitState: 1,
+				}
+				RequestAppendEntriesCli(s, r, lindexstart, lindexend, lterm)
+			}
+		}
 	}
 
 	t := time.NewTimer(time.Duration(s.heartbeatInterval) * time.Millisecond)

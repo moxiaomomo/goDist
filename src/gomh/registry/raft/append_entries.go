@@ -15,7 +15,7 @@ type AppendEntriesRequest struct {
 	leaderName  string
 	leaderHost  string
 	term        uint64
-	commitIndex uint64
+	commitState int32
 }
 
 type AppendEntriesResponse struct {
@@ -33,14 +33,21 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *proto.AppendE
 	defer e.mutex.Unlock()
 
 	resp := 0
-	if req.GetTerm() > e.server.currentTerm {
+	if req.GetTerm() > e.server.currentTerm && req.CommitState != 1 {
 		e.server.SetState(Follower)
 		e.server.currentTerm = req.GetTerm()
 		e.server.currentLeader = req.GetLeaderHost()
 		e.server.leaderAcceptTime = util.GetTimestampInMilli()
 
+		if err := json.Unmarshal(req.GetLogUnit(), &e.server.log.toc_entry); err != nil {
+			fmt.Printf("decode logunit failed: %+v %s\n", req.GetLogUnit(), err)
+		}
+
 		resp = 1
 		fmt.Printf("to be follower to %s\n", req.LeaderName)
+	} else if req.CommitState == 1 && e.server.State() != Leader {
+		fmt.Println("To commit log as leader log commited.")
+		e.server.log.Commite(&e.server.log.toc_entry, e.server.log.file)
 	}
 
 	pb := &proto.AppendEntriesResponse{
@@ -51,7 +58,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *proto.AppendE
 
 func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest, lastindexstart, lastindexend, lastterm uint64) {
 	if s.State() != Leader {
-		fmt.Printf("only leader can request append entries.")
+		fmt.Println("only leader can request append entries.")
 		return
 	}
 
@@ -61,17 +68,20 @@ func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest, lastindexstar
 		return
 	}
 
-	logunit := NewLogUnit(s.conf.CandidateName, req.term, lastterm, lastindexstart, lastindexend)
-	logunitd, _ := json.Marshal(logunit)
-	logunitb := []byte(logunitd)
-
 	client := proto.NewAppendEntriesClient(conn)
 	pb := &proto.AppendEntriesReuqest{
-		LeaderName: s.conf.CandidateName,
-		LeaderHost: s.conf.Host,
-		Term:       req.term,
-		LogUnit:    logunitb,
+		LeaderName:  s.conf.CandidateName,
+		LeaderHost:  s.conf.Host,
+		Term:        req.term,
+		CommitState: req.commitState,
 	}
+
+	if req.commitState != 1 {
+		logunit := NewLogUnit(s.conf.CandidateName, req.term, lastterm, lastindexstart, lastindexend)
+		logunitd, _ := json.Marshal(logunit)
+		pb.LogUnit = []byte(logunitd)
+	}
+
 	res, err := client.AppendEntries(context.Background(), pb)
 
 	if err != nil {
@@ -80,13 +90,8 @@ func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest, lastindexstar
 	}
 	fmt.Printf("[appendentry]from:%s to:%s rpcRes:%+v\n", s.conf.Host, req.peer.Host, res)
 
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	lindex, _ := s.log.LastCommitedInfo()
-	if res.ResponseCode == 1 && lindex == lastindexstart {
-		fmt.Printf("to commit log, index:%d:%d term:%d\n", lastindexstart, lindex, lastterm)
-		s.log.Commite(logunit, s.log.file)
+	if req.commitState != 1 && res.ResponseCode == 1 {
+		s.IncrAppendEntryResp()
 	}
 
 	//TODO
