@@ -29,15 +29,12 @@ type RequestVoteImp struct {
 }
 
 func (e *RequestVoteImp) RequestVoteMe(ctx context.Context, req *proto.VoteRequest) (*proto.VoteResponse, error) {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-
 	voteGranted := false
-	if e.server.State() == Candidate && req.Term > e.server.votedForTerm {
+	if e.server.State() == Candidate && req.Term > e.server.VotedForTerm() {
 		voteGranted = true
 	}
 	// vote only once for one term
-	e.server.votedForTerm = req.Term
+	e.server.SetVotedForTerm(req.Term)
 	pb := &proto.VoteResponse{
 		Term:        req.Term,
 		VoteGranted: voteGranted,
@@ -67,18 +64,15 @@ func RequestVoteMeCli(s *server, req *RequestVoteRequest) {
 	}
 	fmt.Printf("[requestvote]from:%s to:%s rpcRes:%+v\n", s.conf.Host, req.peer.Host, res)
 
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	if res.VoteGranted && s.State() == Candidate {
-		s.voteGrantedNum += 1
+		s.IncrVoteGrantedNum()
 		mostLen := int(math.Ceil(float64(len(s.conf.PeerHosts) / 2)))
-		if s.voteGrantedNum > mostLen {
+		if s.VoteGrantedNum() > mostLen {
 			s.SetState(Leader)
 		}
-		s.peers[req.peer.Host].VoteRequestState = VoteGranted
+		s.peers[req.peer.Host].SetVoteRequestState(VoteGranted)
 	} else {
-		s.peers[req.peer.Host].VoteRequestState = VoteRejected
+		s.peers[req.peer.Host].SetVoteRequestState(VoteRejected)
 	}
 	return
 }

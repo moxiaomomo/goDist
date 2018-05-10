@@ -88,10 +88,38 @@ func (s *server) IsRunning() bool {
 }
 
 func (s *server) State() string {
-	//	s.mutex.Lock()
-	//	defer s.mutex.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	return s.state
+}
+
+func (s *server) VotedForTerm() uint64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	return s.votedForTerm
+}
+
+func (s *server) SetVotedForTerm(term uint64) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.votedForTerm = term
+}
+
+func (s *server) VoteGrantedNum() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	return s.voteGrantedNum
+}
+
+func (s *server) IncrVoteGrantedNum() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.voteGrantedNum += 1
 }
 
 func (s *server) IncrTermForvote() {
@@ -99,8 +127,8 @@ func (s *server) IncrTermForvote() {
 }
 
 func (s *server) SetState(state string) {
-	//	s.mutex.Lock()
-	//	defer s.mutex.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	s.state = state
 }
@@ -109,8 +137,6 @@ func (s *server) Init() error {
 	if s.IsRunning() {
 		return fmt.Errorf("server has been running with state:%d", s.State())
 	}
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
 
 	if s.State() == Initiated {
 		s.SetState(Initiated)
@@ -202,9 +228,8 @@ func (s *server) loadConf() error {
 	s.peers = make(map[string]*Peer)
 	for _, c := range s.conf.PeerHosts {
 		s.peers[c] = &Peer{
-			Name:             c,
-			Host:             c,
-			VoteRequestState: NotYetVote,
+			Name: c,
+			Host: c,
 		}
 	}
 

@@ -9,7 +9,7 @@ type Peer struct {
 	server           *server
 	Name             string
 	Host             string
-	VoteRequestState int
+	voteRequestState int
 
 	lastActivity      time.Time
 	heartbeatInterval time.Duration
@@ -22,7 +22,21 @@ func NewPeer(server *server, name, host string, heartbeatInterval time.Duration)
 		server:            server,
 		Name:              name,
 		Host:              host,
-		VoteRequestState:  NotYetVote,
+		voteRequestState:  NotYetVote,
 		heartbeatInterval: heartbeatInterval,
 	}
+}
+
+func (p *Peer) SetVoteRequestState(state int) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	p.voteRequestState = state
+}
+
+func (p *Peer) VoteRequestState() int {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	return p.voteRequestState
 }
