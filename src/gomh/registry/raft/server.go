@@ -94,6 +94,10 @@ func (s *server) State() string {
 	return s.state
 }
 
+func (s *server) IncrTermForvote() {
+	s.currentTerm += 1
+}
+
 func (s *server) SetState(state string) {
 	//	s.mutex.Lock()
 	//	defer s.mutex.Unlock()
@@ -263,6 +267,7 @@ func (s *server) followerLoop() {
 				return
 			}
 			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*2 {
+				s.IncrTermForvote()
 				s.SetState(Candidate)
 			}
 			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
@@ -331,7 +336,7 @@ func (s *server) leaderLoop() {
 						host: s.conf.Host,
 						term: s.currentTerm,
 					}
-					SendHeartbeatCli(s, r)
+					SendHeartbeatCli(s, r, []byte(""))
 				}
 			}
 			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)

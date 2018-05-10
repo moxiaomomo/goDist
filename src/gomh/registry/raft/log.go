@@ -100,3 +100,14 @@ func (l *Log) Commite(lu *LogUnit, file *os.File) error {
 	l.logIndexEnd = uint64(endidx)
 	return nil
 }
+
+func (l *Log) LogEntriesToSync(fromterm uint64) []*LogUnit {
+	lulist := []*LogUnit{}
+	for _, l := range l.entries {
+		if fromterm > 0 && l.CurTerm <= fromterm {
+			continue
+		}
+		lulist = append(lulist, l)
+	}
+	return lulist
+}

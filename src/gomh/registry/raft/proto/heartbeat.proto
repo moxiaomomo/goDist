@@ -10,8 +10,10 @@ message HeartbeatRequest {
     string host = 1;
     uint64 term = 2;
     string event = 3;
+    bytes entries = 4;
 }
 
 message HeartbeatResponse {
-    uint32 respcode = 1;
+    uint64 peerterm = 1;
+    uint32 respcode = 2;
 }
