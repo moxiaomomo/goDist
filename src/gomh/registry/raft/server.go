@@ -23,9 +23,10 @@ type server struct {
 	mutex   sync.RWMutex
 	stopped chan bool
 
-	name          string
-	path          string
-	state         string
+	name  string
+	path  string
+	state string
+
 	currentLeader string
 	currentTerm   uint64
 	confPath      string
@@ -163,8 +164,11 @@ func (s *server) Init() error {
 	}
 	fmt.Printf("%+v\n", s.log.entries)
 
-	_, s.currentTerm = s.log.LastCommitedInfo()
-
+	err = s.LoadState()
+	if err != nil {
+		return fmt.Errorf("raft load srvstate error: %s", err)
+	}
+	_, s.currentTerm = s.log.LastCommitInfo()
 	s.SetState(Initiated)
 	return nil
 }
@@ -195,7 +199,7 @@ func (s *server) acceptVoteRequest() {
 	server := grpc.NewServer()
 	pb.RegisterRequestVoteServer(server, &RequestVoteImp{server: s})
 	pb.RegisterAppendEntriesServer(server, &AppendEntriesImp{server: s})
-	pb.RegisterHeartbeatServer(server, &SendHeartbeatImp{server: s})
+	//pb.RegisterHeartbeatServer(server, &SendHeartbeatImp{server: s})
 
 	fmt.Printf("To listen on %s\n", s.conf.Host)
 	address, err := net.Listen("tcp", s.conf.Host)
@@ -260,9 +264,13 @@ func (s *server) candidateLoop() {
 			if s.State() != Candidate {
 				return
 			}
-			s.voteGrantedNum = 0
-			s.currentTerm += 1
+			s.currentTerm += 1   // candidate term to increased by 1
+			s.voteGrantedNum = 1 // vote for itself
+			s.peers[s.conf.Host].SetVoteRequestState(VoteGranted)
 			for _, p := range s.peers {
+				if s.conf.Host == p.Host {
+					continue
+				}
 				r := &RequestVoteRequest{
 					peer:          p,
 					Term:          s.currentTerm,
@@ -307,41 +315,18 @@ func (s *server) followerLoop() {
 
 func (s *server) leaderLoop() {
 	s.InitAppendEntry()
-	lindexstart, lterm := s.log.LastCommitedInfo()
-	lindexend := s.log.CurrentLogIndexEnd()
+	lentries := s.log.GetLogEntries(len(s.log.entries)-1, len(s.log.entries))
 	for _, p := range s.peers {
 		if s.conf.Host == p.Host {
 			continue
 		}
-		r := &AppendEntriesRequest{
-			peer:        p,
-			leaderName:  s.conf.Host,
-			leaderHost:  s.conf.Host,
-			term:        s.currentTerm,
-			commitState: 0,
-		}
-		RequestAppendEntriesCli(s, r, lindexstart, lindexend, lterm)
+		RequestAppendEntriesCli(s, p, lentries)
 	}
 	if s.CanCommitLog() {
-		fmt.Printf("to commit log, index:%d:%d term:%d\n", lindexstart, lindexend, lterm)
-		logunit := NewLogUnit(s.conf.CandidateName, s.currentTerm, lterm, lindexstart, lindexend)
-		if err := s.log.Commite(logunit, s.log.file); err != nil {
-			fmt.Printf("CommiteLog Failed: %s\n", err)
-		} else {
-			for _, p := range s.peers {
-				if s.conf.Host == p.Host {
-					continue
-				}
-				r := &AppendEntriesRequest{
-					peer:        p,
-					leaderName:  s.conf.Host,
-					leaderHost:  s.conf.Host,
-					term:        s.currentTerm,
-					commitState: 1,
-				}
-				RequestAppendEntriesCli(s, r, lindexstart, lindexend, lterm)
-			}
-		}
+		index, _ := s.log.LastLogInfo()
+		s.log.UpdateCommitIndex(index)
+		s.FlushState()
+		fmt.Printf("to commit log, index:%d term:%d\n", index, s.currentTerm)
 	}
 
 	t := time.NewTimer(time.Duration(s.heartbeatInterval) * time.Millisecond)
@@ -356,12 +341,7 @@ func (s *server) leaderLoop() {
 					if s.conf.Host == p.Host {
 						continue
 					}
-					r := &HeartbeatRequest{
-						peer: p,
-						host: s.conf.Host,
-						term: s.currentTerm,
-					}
-					SendHeartbeatCli(s, r, []byte(""))
+					RequestAppendEntriesCli(s, p, []*LogEntry{})
 				}
 			}
 			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)

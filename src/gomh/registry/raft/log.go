@@ -10,35 +10,52 @@ import (
 type Log struct {
 	ApplyFunc func(*LogEntry, Command) (interface{}, error)
 
-	mutex sync.RWMutex
-	file  *os.File
-	path  string
-	//	entries     []*LogEntry
-	//	units       []*LogUnit
-	entries     []*LogUnit
-	toc_entry   LogUnit
-	logIndexEnd uint64
+	mutex     sync.RWMutex
+	file      *os.File
+	path      string
+	entries   []*LogEntry
+	toc_entry LogEntry
+
+	startIndex  uint64
+	commitIndex uint64
 	initialized bool
 }
 
 func newLog() *Log {
 	log := &Log{
-		//		entries: make([]*LogEntry, 0),
-		entries:     make([]*LogUnit, 0),
-		toc_entry:   LogUnit{},
-		logIndexEnd: 0,
+		entries:     make([]*LogEntry, 0),
+		toc_entry:   LogEntry{},
+		commitIndex: 0,
+		startIndex:  0,
 	}
 	return log
 }
 
-func (l *Log) CurrentLogIndexEnd() uint64 {
+func (l *Log) LastCommitInfo() (index uint64, term uint64) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	return l.logIndexEnd
+	if len(l.entries) == 0 {
+		return 0, 0
+	}
+
+	last := l.entries[l.commitIndex-1]
+	return last.Entry.Index, last.Entry.Term
 }
 
-func (l *Log) LastCommitedInfo() (index uint64, term uint64) {
+func (l *Log) PreLastLogInfo() (index uint64, term uint64) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if len(l.entries) <= 1 {
+		return 0, 0
+	}
+
+	last := l.entries[len(l.entries)-2]
+	return last.Entry.Index, last.Entry.Term
+}
+
+func (l *Log) LastLogInfo() (index uint64, term uint64) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -47,7 +64,23 @@ func (l *Log) LastCommitedInfo() (index uint64, term uint64) {
 	}
 
 	last := l.entries[len(l.entries)-1]
-	return last.CurIndexStart, last.CurTerm
+	return last.Entry.Index, last.Entry.Term
+}
+
+func (l *Log) GetLogEntries(s, e int) []*LogEntry {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if len(l.entries) == 0 {
+		return []*LogEntry{}
+	}
+	if s < 0 {
+		s = 0
+	}
+	if e > len(l.entries) {
+		e = len(l.entries)
+	}
+	return l.entries[s:e]
 }
 
 func (l *Log) LogInit(path string) error {
@@ -71,7 +104,7 @@ func (l *Log) LogInit(path string) error {
 
 	startIndex := int64(0)
 	for {
-		lunit := &LogUnit{}
+		lunit := &LogEntry{}
 		startIndex, err = lunit.load(l.file, startIndex)
 
 		if err != nil {
@@ -82,29 +115,59 @@ func (l *Log) LogInit(path string) error {
 			}
 		}
 		l.entries = append(l.entries, lunit)
-		l.logIndexEnd = uint64(startIndex)
+	}
+
+	if len(l.entries) > 0 {
+		l.startIndex = l.entries[0].Entry.GetIndex()
 	}
 	l.initialized = true
 	return nil
 }
 
-func (l *Log) Commite(lu *LogUnit, file *os.File) error {
+func (l *Log) AppendEntry(lu *LogEntry) error {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	endidx, err := lu.dump(file)
+	_, err := lu.dump(l.file)
 	if err != nil {
 		return err
 	}
 	l.entries = append(l.entries, lu)
-	l.logIndexEnd = uint64(endidx)
 	return nil
 }
 
-func (l *Log) LogEntriesToSync(fromterm uint64) []*LogUnit {
-	lulist := []*LogUnit{}
+func (l *Log) UpdateCommitIndex(index uint64) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if index <= l.commitIndex {
+		return
+	}
+	if len(l.entries) == 0 {
+		fmt.Println("Local log is empty, not to update commitindex.")
+		return
+	}
+
+	lastindex := l.entries[len(l.entries)-1].Entry.GetIndex()
+	if index > lastindex {
+		fmt.Printf("Local log is too old or index to commit is invalid. %d:%d", index, lastindex)
+		return
+	}
+
+	l.commitIndex = index
+}
+
+func (l *Log) CommitIndex() uint64 {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return l.commitIndex
+}
+
+func (l *Log) LogEntriesToSync(fromterm uint64) []*LogEntry {
+	lulist := []*LogEntry{}
 	for _, l := range l.entries {
-		if fromterm > 0 && l.CurTerm <= fromterm {
+		if fromterm > 0 && l.Entry.Term <= fromterm {
 			continue
 		}
 		lulist = append(lulist, l)

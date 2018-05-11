@@ -1,96 +1,87 @@
 package raft
 
 import (
-	"encoding/json"
 	"fmt"
 	"golang.org/x/net/context"
-	"gomh/registry/raft/proto"
+	pb "gomh/registry/raft/proto"
 	"gomh/util"
 	"google.golang.org/grpc"
 	"sync"
 )
-
-type AppendEntriesRequest struct {
-	peer        *Peer
-	leaderName  string
-	leaderHost  string
-	term        uint64
-	commitState int32
-}
-
-type AppendEntriesResponse struct {
-	peer         *Peer
-	responseCode int32
-}
 
 type AppendEntriesImp struct {
 	server *server
 	mutex  sync.Mutex
 }
 
-func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *proto.AppendEntriesReuqest) (*proto.AppendEntriesResponse, error) {
+func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntriesReuqest) (*pb.AppendEntriesResponse, error) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
-	resp := 0
-	if req.GetTerm() > e.server.currentTerm && req.CommitState != 1 {
+	resp := false
+	if req.GetTerm() > e.server.currentTerm {
 		e.server.SetState(Follower)
 		e.server.currentTerm = req.GetTerm()
-		e.server.currentLeader = req.GetLeaderHost()
+		e.server.currentLeader = req.GetLeaderName()
 		e.server.leaderAcceptTime = util.GetTimestampInMilli()
 
-		if err := json.Unmarshal(req.GetLogUnit(), &e.server.log.toc_entry); err != nil {
-			fmt.Printf("decode logunit failed: %+v %s\n", req.GetLogUnit(), err)
+		e.server.log.UpdateCommitIndex(req.GetCommitIndex())
+
+		entries := req.GetEntries()
+		if len(entries) > 0 {
+			for _, entry := range entries {
+				e.server.log.AppendEntry(&LogEntry{Entry: entry})
+			}
 		}
 
-		resp = 1
+		resp = true
 		fmt.Printf("to be follower to %s\n", req.LeaderName)
-	} else if req.CommitState == 1 && e.server.State() != Leader {
-		fmt.Println("To commit log as leader log commited.")
-		e.server.log.Commite(&e.server.log.toc_entry, e.server.log.file)
 	}
 
-	pb := &proto.AppendEntriesResponse{
-		ResponseCode: int32(resp),
+	pb := &pb.AppendEntriesResponse{
+		Success: resp,
 	}
 	return pb, nil
 }
 
-func RequestAppendEntriesCli(s *server, req *AppendEntriesRequest, lastindexstart, lastindexend, lastterm uint64) {
+func RequestAppendEntriesCli(s *server, peer *Peer, logEntries []*LogEntry) {
 	if s.State() != Leader {
 		fmt.Println("only leader can request append entries.")
 		return
 	}
 
-	conn, err := grpc.Dial(req.peer.Host, grpc.WithInsecure())
+	conn, err := grpc.Dial(peer.Host, grpc.WithInsecure())
 	if err != nil {
 		fmt.Printf("dail rpc failed, err: %s\n", err)
 		return
 	}
 
-	client := proto.NewAppendEntriesClient(conn)
-	pb := &proto.AppendEntriesReuqest{
-		LeaderName:  s.conf.CandidateName,
-		LeaderHost:  s.conf.Host,
-		Term:        req.term,
-		CommitState: req.commitState,
+	plastindex, plastterm := s.log.PreLastLogInfo()
+	client := pb.NewAppendEntriesClient(conn)
+
+	entries := []*pb.LogEntry{}
+	for _, l := range logEntries {
+		entries = append(entries, l.Entry)
 	}
 
-	if req.commitState != 1 {
-		logunit := NewLogUnit(s.conf.CandidateName, req.term, lastterm, lastindexstart, lastindexend)
-		logunitd, _ := json.Marshal(logunit)
-		pb.LogUnit = []byte(logunitd)
+	req := &pb.AppendEntriesReuqest{
+		Term:        s.currentTerm,
+		PreLogIndex: plastindex,
+		PreLogTerm:  plastterm,
+		CommitIndex: s.log.CommitIndex(),
+		LeaderName:  s.conf.Host,
+		Entries:     entries,
 	}
 
-	res, err := client.AppendEntries(context.Background(), pb)
+	res, err := client.AppendEntries(context.Background(), req)
 
 	if err != nil {
 		fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
 		return
 	}
-	fmt.Printf("[appendentry]from:%s to:%s rpcRes:%+v\n", s.conf.Host, req.peer.Host, res)
+	fmt.Printf("[appendentry]from:%s to:%s rpcRes:%+v\n", s.conf.Host, peer.Host, res)
 
-	if req.commitState != 1 && res.ResponseCode == 1 {
+	if res.Success {
 		s.IncrAppendEntryResp()
 	}
 

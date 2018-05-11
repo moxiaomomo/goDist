@@ -8,19 +8,13 @@ It is generated from these files:
 	log_entry.proto
 
 It has these top-level messages:
-	LogRequest
-	LogResponse
+	LogEntry
 */
 package proto
 
 import proto1 "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
-
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto1.Marshal
@@ -33,162 +27,61 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto1.ProtoPackageIsVersion2 // please upgrade the proto package
 
-type LogRequest struct {
+type LogEntry struct {
 	Index       uint64 `protobuf:"varint,1,opt,name=index" json:"index,omitempty"`
 	Term        uint64 `protobuf:"varint,2,opt,name=term" json:"term,omitempty"`
 	Commandname string `protobuf:"bytes,3,opt,name=commandname" json:"commandname,omitempty"`
 	Command     []byte `protobuf:"bytes,4,opt,name=command,proto3" json:"command,omitempty"`
 }
 
-func (m *LogRequest) Reset()                    { *m = LogRequest{} }
-func (m *LogRequest) String() string            { return proto1.CompactTextString(m) }
-func (*LogRequest) ProtoMessage()               {}
-func (*LogRequest) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{0} }
+func (m *LogEntry) Reset()                    { *m = LogEntry{} }
+func (m *LogEntry) String() string            { return proto1.CompactTextString(m) }
+func (*LogEntry) ProtoMessage()               {}
+func (*LogEntry) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{0} }
 
-func (m *LogRequest) GetIndex() uint64 {
+func (m *LogEntry) GetIndex() uint64 {
 	if m != nil {
 		return m.Index
 	}
 	return 0
 }
 
-func (m *LogRequest) GetTerm() uint64 {
+func (m *LogEntry) GetTerm() uint64 {
 	if m != nil {
 		return m.Term
 	}
 	return 0
 }
 
-func (m *LogRequest) GetCommandname() string {
+func (m *LogEntry) GetCommandname() string {
 	if m != nil {
 		return m.Commandname
 	}
 	return ""
 }
 
-func (m *LogRequest) GetCommand() []byte {
+func (m *LogEntry) GetCommand() []byte {
 	if m != nil {
 		return m.Command
 	}
 	return nil
 }
 
-type LogResponse struct {
-	Respcode uint32 `protobuf:"varint,1,opt,name=respcode" json:"respcode,omitempty"`
-	Respmsg  []byte `protobuf:"bytes,2,opt,name=respmsg,proto3" json:"respmsg,omitempty"`
-}
-
-func (m *LogResponse) Reset()                    { *m = LogResponse{} }
-func (m *LogResponse) String() string            { return proto1.CompactTextString(m) }
-func (*LogResponse) ProtoMessage()               {}
-func (*LogResponse) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{1} }
-
-func (m *LogResponse) GetRespcode() uint32 {
-	if m != nil {
-		return m.Respcode
-	}
-	return 0
-}
-
-func (m *LogResponse) GetRespmsg() []byte {
-	if m != nil {
-		return m.Respmsg
-	}
-	return nil
-}
-
 func init() {
-	proto1.RegisterType((*LogRequest)(nil), "proto.LogRequest")
-	proto1.RegisterType((*LogResponse)(nil), "proto.LogResponse")
-}
-
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConn
-
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion4
-
-// Client API for LogEntry service
-
-type LogEntryClient interface {
-	SendLogEntry(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*LogResponse, error)
-}
-
-type logEntryClient struct {
-	cc *grpc.ClientConn
-}
-
-func NewLogEntryClient(cc *grpc.ClientConn) LogEntryClient {
-	return &logEntryClient{cc}
-}
-
-func (c *logEntryClient) SendLogEntry(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*LogResponse, error) {
-	out := new(LogResponse)
-	err := grpc.Invoke(ctx, "/proto.LogEntry/SendLogEntry", in, out, c.cc, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// Server API for LogEntry service
-
-type LogEntryServer interface {
-	SendLogEntry(context.Context, *LogRequest) (*LogResponse, error)
-}
-
-func RegisterLogEntryServer(s *grpc.Server, srv LogEntryServer) {
-	s.RegisterService(&_LogEntry_serviceDesc, srv)
-}
-
-func _LogEntry_SendLogEntry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LogRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(LogEntryServer).SendLogEntry(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.LogEntry/SendLogEntry",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(LogEntryServer).SendLogEntry(ctx, req.(*LogRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _LogEntry_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.LogEntry",
-	HandlerType: (*LogEntryServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "SendLogEntry",
-			Handler:    _LogEntry_SendLogEntry_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "log_entry.proto",
+	proto1.RegisterType((*LogEntry)(nil), "proto.LogEntry")
 }
 
 func init() { proto1.RegisterFile("log_entry.proto", fileDescriptor1) }
 
 var fileDescriptor1 = []byte{
-	// 205 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x4c, 0x8f, 0xb1, 0x4e, 0x85, 0x30,
-	0x14, 0x86, 0xad, 0x72, 0xf5, 0x7a, 0x2e, 0xc6, 0x78, 0xe2, 0xd0, 0x30, 0x35, 0x4c, 0x4c, 0x0c,
-	0x3a, 0xf8, 0x00, 0xc4, 0x8d, 0xa9, 0x3e, 0x80, 0x41, 0x7a, 0xd2, 0x98, 0xd8, 0x1e, 0x6c, 0x6b,
-	0xa2, 0x6f, 0x6f, 0x28, 0x82, 0x4c, 0x3d, 0xdf, 0x37, 0xf4, 0xcb, 0x0f, 0xb7, 0x1f, 0x6c, 0x5f,
-	0xc9, 0xa7, 0xf0, 0xd3, 0x4e, 0x81, 0x13, 0xe3, 0x21, 0x3f, 0x75, 0x00, 0xe8, 0xd9, 0x6a, 0xfa,
-	0xfc, 0xa2, 0x98, 0xf0, 0x1e, 0x0e, 0xef, 0xde, 0xd0, 0xb7, 0x14, 0x4a, 0x34, 0x85, 0x5e, 0x00,
-	0x11, 0x8a, 0x44, 0xc1, 0xc9, 0xf3, 0x2c, 0xf3, 0x8d, 0x0a, 0x4e, 0x23, 0x3b, 0x37, 0x78, 0xe3,
-	0x07, 0x47, 0xf2, 0x42, 0x89, 0xe6, 0x5a, 0xef, 0x15, 0x4a, 0xb8, 0xfa, 0x43, 0x59, 0x28, 0xd1,
-	0x94, 0x7a, 0xc5, 0xba, 0x83, 0x53, 0x6e, 0xc6, 0x89, 0x7d, 0x24, 0xac, 0xe0, 0x18, 0x28, 0x4e,
-	0x23, 0x1b, 0xca, 0xdd, 0x1b, 0xbd, 0xf1, 0xfc, 0xc9, 0x7c, 0xbb, 0x68, 0x73, 0xbd, 0xd4, 0x2b,
-	0x3e, 0x74, 0x70, 0xec, 0xd9, 0x3e, 0xcf, 0x8b, 0xf0, 0x09, 0xca, 0x17, 0xf2, 0x66, 0xe3, 0xbb,
-	0x65, 0x63, 0xfb, 0xbf, 0xac, 0xc2, 0xbd, 0x5a, 0xc2, 0xf5, 0xd9, 0xdb, 0x65, 0x96, 0x8f, 0xbf,
-	0x01, 0x00, 0x00, 0xff, 0xff, 0x1f, 0x3b, 0x57, 0x49, 0x1e, 0x01, 0x00, 0x00,
+	// 130 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0xcf, 0xc9, 0x4f, 0x8f,
+	0x4f, 0xcd, 0x2b, 0x29, 0xaa, 0xd4, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x05, 0x53, 0x4a,
+	0x05, 0x5c, 0x1c, 0x3e, 0xf9, 0xe9, 0xae, 0x20, 0x09, 0x21, 0x11, 0x2e, 0xd6, 0xcc, 0xbc, 0x94,
+	0xd4, 0x0a, 0x09, 0x46, 0x05, 0x46, 0x0d, 0x96, 0x20, 0x08, 0x47, 0x48, 0x88, 0x8b, 0xa5, 0x24,
+	0xb5, 0x28, 0x57, 0x82, 0x09, 0x2c, 0x08, 0x66, 0x0b, 0x29, 0x70, 0x71, 0x27, 0xe7, 0xe7, 0xe6,
+	0x26, 0xe6, 0xa5, 0xe4, 0x25, 0xe6, 0xa6, 0x4a, 0x30, 0x2b, 0x30, 0x6a, 0x70, 0x06, 0x21, 0x0b,
+	0x09, 0x49, 0x70, 0xb1, 0x43, 0xb9, 0x12, 0x2c, 0x0a, 0x8c, 0x1a, 0x3c, 0x41, 0x30, 0x6e, 0x12,
+	0x1b, 0xd8, 0x62, 0x63, 0x40, 0x00, 0x00, 0x00, 0xff, 0xff, 0x86, 0x3b, 0x21, 0xed, 0x92, 0x00,
+	0x00, 0x00,
 }

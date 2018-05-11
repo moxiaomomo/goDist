@@ -7,13 +7,17 @@ service AppendEntries {
 }
 
 message AppendEntriesReuqest {
-    string LeaderName = 1;
-    string LeaderHost = 2;
-    uint64 Term = 3;
-    int32 CommitState = 4;
-    bytes LogUnit = 5;
+    uint64 Term = 1;
+    uint64 PreLogIndex = 2;
+    uint64 PreLogTerm = 3;
+    uint64 CommitIndex = 4;
+    string LeaderName = 5;
+    repeated LogEntry Entries = 6;
 }
 
 message AppendEntriesResponse {
-    int32 ResponseCode = 1;
+    bool Success = 1;
+    uint64 Term = 2;
+    uint64 Index = 3;
+    uint64 CommitIndex = 4;
 }
