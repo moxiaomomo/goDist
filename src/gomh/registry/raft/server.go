@@ -148,6 +148,12 @@ func (s *server) VoteForSelf() {
 	s.peers[s.conf.Host].SetVoteRequestState(VoteGranted)
 }
 
+// Init steps:
+// check if running or initiated before
+// load configuration file
+// load raft log
+// recover server persistent status
+// set state = Initiated
 func (s *server) Init() error {
 	if s.IsRunning() {
 		return fmt.Errorf("server has been running with state:%d", s.State())
@@ -182,11 +188,16 @@ func (s *server) Init() error {
 	if err != nil {
 		return fmt.Errorf("raft load srvstate error: %s", err)
 	}
-	//_, s.currentTerm = s.log.LastCommitInfo()
+
 	s.SetState(Initiated)
 	return nil
 }
 
+// start steps:
+// comlete initiation
+// set state = Follower
+// new goroutine for tcp listening
+// enter loop with a propriate state
 func (s *server) Start() error {
 	if s.IsRunning() {
 		return fmt.Errorf("server has been running with state:%d", s.State())
@@ -203,13 +214,13 @@ func (s *server) Start() error {
 	loopch := make(chan int)
 	go func() {
 		defer func() { loopch <- 1 }()
-		s.acceptVoteRequest()
+		s.ListenAndServe()
 	}()
 	s.loop()
 	return nil
 }
 
-func (s *server) acceptVoteRequest() {
+func (s *server) ListenAndServe() {
 	server := grpc.NewServer()
 	pb.RegisterRequestVoteServer(server, &RequestVoteImp{server: s})
 	pb.RegisterAppendEntriesServer(server, &AppendEntriesImp{server: s})
@@ -246,8 +257,9 @@ func (s *server) loadConf() error {
 	s.peers = make(map[string]*Peer)
 	for _, c := range s.conf.PeerHosts {
 		s.peers[c] = &Peer{
-			Name: c,
-			Host: c,
+			Name:   c,
+			Host:   c,
+			server: s,
 		}
 	}
 
@@ -266,6 +278,9 @@ func (s *server) loop() {
 			s.leaderLoop()
 			//		case Snapshotting:
 			//			s.snapshotLoop()
+		case Stopped:
+			// TODO: do something before server stop
+			break
 		}
 	}
 }
@@ -281,18 +296,11 @@ func (s *server) candidateLoop() {
 			s.currentTerm += 1 // candidate term to increased by 1
 			s.VoteForSelf()
 			lindex, lterm := s.log.LastLogInfo()
-			for _, p := range s.peers {
-				if s.conf.Host == p.Host {
+			for idx, _ := range s.peers {
+				if s.conf.Host == s.peers[idx].Host {
 					continue
 				}
-				r := &RequestVoteRequest{
-					peer:          p,
-					Term:          s.currentTerm,
-					LastLogIndex:  lindex,
-					LastLogTerm:   lterm,
-					CandidateName: s.conf.CandidateName,
-				}
-				RequestVoteMeCli(s, r)
+				s.peers[idx].RequestVoteMe(lindex, lterm)
 			}
 			if s.VoteGrantedNum() >= s.QuorumSize() {
 				s.SetState(Leader)
@@ -334,6 +342,7 @@ func (s *server) followerLoop() {
 }
 
 func (s *server) leaderLoop() {
+	// to request append entry as a new leader is elected
 	s.appendEntryRespCnt = 1
 	lindex, lterm := s.log.LastLogInfo()
 	entry := &pb.LogEntry{
@@ -344,11 +353,11 @@ func (s *server) leaderLoop() {
 	}
 	s.log.AppendEntry(&LogEntry{Entry: entry})
 
-	for _, p := range s.peers {
-		if s.conf.Host == p.Host {
+	for idx, _ := range s.peers {
+		if s.conf.Host == s.peers[idx].Host {
 			continue
 		}
-		RequestAppendEntriesCli(s, p, []*pb.LogEntry{entry}, lindex, lterm)
+		s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, lindex, lterm)
 	}
 	if s.CanCommitLog() {
 		index, _ := s.log.LastLogInfo()
@@ -357,6 +366,7 @@ func (s *server) leaderLoop() {
 		fmt.Printf("to commit log, index:%d term:%d\n", index, s.currentTerm)
 	}
 
+	// send heartbeat as leader state
 	t := time.NewTimer(time.Duration(s.heartbeatInterval) * time.Millisecond)
 	for s.State() == Leader {
 		select {
@@ -366,17 +376,19 @@ func (s *server) leaderLoop() {
 			}
 			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval {
 				s.appendEntryRespCnt = 1
-				for _, p := range s.peers {
-					if s.conf.Host == p.Host {
+				for idx, _ := range s.peers {
+					if s.conf.Host == s.peers[idx].Host {
 						continue
 					}
-					RequestAppendEntriesCli(s, p, []*pb.LogEntry{}, 0, 0)
+					s.peers[idx].RequestAppendEntries([]*pb.LogEntry{}, 0, 0)
 				}
 				if !s.CanCommitLog() {
 					s.SetState(Candidate)
 				}
 			}
-			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
+			if s.State() == Leader {
+				t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
+			}
 		case isStop := <-s.stopped:
 			if isStop {
 				s.SetState(Stopped)

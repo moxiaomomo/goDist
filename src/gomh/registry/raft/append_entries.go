@@ -5,7 +5,6 @@ import (
 	"golang.org/x/net/context"
 	pb "gomh/registry/raft/proto"
 	"gomh/util"
-	"google.golang.org/grpc"
 	"sync"
 )
 
@@ -68,70 +67,4 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 
 	fmt.Printf("to be follower to %s\n", req.LeaderName)
 	return pb, nil
-}
-
-func RequestAppendEntriesCli(s *server, peer *Peer, entries []*pb.LogEntry, lindex, lterm uint64) {
-	if s.State() != Leader {
-		fmt.Println("only leader can request append entries.")
-		return
-	}
-
-	conn, err := grpc.Dial(peer.Host, grpc.WithInsecure())
-	if err != nil {
-		fmt.Printf("dail rpc failed, err: %s\n", err)
-		return
-	}
-
-	client := pb.NewAppendEntriesClient(conn)
-
-	req := &pb.AppendEntriesReuqest{
-		Term:        s.currentTerm,
-		PreLogIndex: lindex,
-		PreLogTerm:  lterm,
-		CommitIndex: s.log.CommitIndex(),
-		LeaderName:  s.conf.Host,
-		Entries:     entries,
-	}
-
-	res, err := client.AppendEntries(context.Background(), req)
-
-	if err != nil {
-		fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
-		return
-	}
-	fmt.Printf("[appendentry]from:%s to:%s rpcRes:%+v\n", s.conf.Host, peer.Host, res)
-
-	if res.Success {
-		s.IncrAppendEntryResp()
-	} else {
-		el := []*pb.LogEntry{}
-		for _, e := range s.log.entries {
-			if e.Entry.GetIndex() <= res.Index {
-				continue
-			}
-			el = append(el, e.Entry)
-		}
-		req := &pb.AppendEntriesReuqest{
-			Term:        s.currentTerm,
-			PreLogIndex: res.Index,
-			PreLogTerm:  res.Term,
-			CommitIndex: s.log.CommitIndex(),
-			LeaderName:  s.conf.Host,
-			Entries:     el,
-		}
-
-		res, err = client.AppendEntries(context.Background(), req)
-
-		if err != nil {
-			fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
-			return
-		} else {
-			fmt.Printf("synlog res: %+v %t %d %d\n", req, res.Success, res.Index, res.Term)
-		}
-		if res.Success {
-			s.IncrAppendEntryResp()
-		}
-	}
-
-	//TODO
 }

@@ -1,11 +1,8 @@
 package raft
 
 import (
-	"fmt"
 	"golang.org/x/net/context"
 	"gomh/registry/raft/proto"
-	"google.golang.org/grpc"
-	//	"math"
 	"sync"
 )
 
@@ -41,35 +38,4 @@ func (e *RequestVoteImp) RequestVoteMe(ctx context.Context, req *proto.VoteReque
 		VoteGranted: voteGranted,
 	}
 	return pb, nil
-}
-
-func RequestVoteMeCli(s *server, req *RequestVoteRequest) {
-	conn, err := grpc.Dial(req.peer.Host, grpc.WithInsecure())
-	if err != nil {
-		fmt.Errorf("dail rpc failed, err: %s\n", err)
-		return
-	}
-
-	client := proto.NewRequestVoteClient(conn)
-	pb := &proto.VoteRequest{
-		Term:          req.Term,
-		LastLogIndex:  req.LastLogIndex,
-		LastLogTerm:   req.LastLogTerm,
-		CandidateName: req.CandidateName,
-	}
-	res, err := client.RequestVoteMe(context.Background(), pb)
-
-	if err != nil {
-		fmt.Printf("client RequestVoteMe failed, err:%s\n", err)
-		return
-	}
-	fmt.Printf("[requestvote]from:%s to:%s rpcRes:%+v\n", s.conf.Host, req.peer.Host, res)
-
-	if res.VoteGranted && s.State() == Candidate {
-		s.IncrVoteGrantedNum()
-		s.peers[req.peer.Host].SetVoteRequestState(VoteGranted)
-	} else {
-		s.peers[req.peer.Host].SetVoteRequestState(VoteRejected)
-	}
-	return
 }
