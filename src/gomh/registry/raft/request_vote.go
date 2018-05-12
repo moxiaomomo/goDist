@@ -5,7 +5,7 @@ import (
 	"golang.org/x/net/context"
 	"gomh/registry/raft/proto"
 	"google.golang.org/grpc"
-	"math"
+	//	"math"
 	"sync"
 )
 
@@ -30,7 +30,8 @@ type RequestVoteImp struct {
 
 func (e *RequestVoteImp) RequestVoteMe(ctx context.Context, req *proto.VoteRequest) (*proto.VoteResponse, error) {
 	voteGranted := false
-	if e.server.State() == Candidate && req.Term > e.server.VotedForTerm() {
+	lastindex, _ := e.server.log.LastLogInfo()
+	if e.server.State() == Candidate && req.Term > e.server.VotedForTerm() && req.LastLogIndex >= lastindex {
 		voteGranted = true
 	}
 	// vote only once for one term
@@ -59,17 +60,13 @@ func RequestVoteMeCli(s *server, req *RequestVoteRequest) {
 	res, err := client.RequestVoteMe(context.Background(), pb)
 
 	if err != nil {
-		fmt.Errorf("client RequestVoteMe failed, err:%s\n", err)
+		fmt.Printf("client RequestVoteMe failed, err:%s\n", err)
 		return
 	}
 	fmt.Printf("[requestvote]from:%s to:%s rpcRes:%+v\n", s.conf.Host, req.peer.Host, res)
 
 	if res.VoteGranted && s.State() == Candidate {
 		s.IncrVoteGrantedNum()
-		mostLen := int(math.Ceil(float64(len(s.conf.PeerHosts) / 2)))
-		if s.VoteGrantedNum() > mostLen {
-			s.SetState(Leader)
-		}
 		s.peers[req.peer.Host].SetVoteRequestState(VoteGranted)
 	} else {
 		s.peers[req.peer.Host].SetVoteRequestState(VoteRejected)

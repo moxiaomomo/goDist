@@ -30,7 +30,7 @@ func (s *server) FlushState() error {
 	}
 
 	logpath := path.Join(s.path, "internlog")
-	fname := fmt.Sprintf("%s/state-%s", logpath, s.name)
+	fname := fmt.Sprintf("%s/state-%s", logpath, s.conf.CandidateName)
 	file, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE, 0600)
 
 	w := bufio.NewWriter(file)
@@ -55,7 +55,8 @@ func (s *server) LoadState() error {
 	if err = json.Unmarshal(b, srvstate); err != nil {
 		return err
 	}
-	fmt.Printf("CommitIndex loaded: %d\n", srvstate.CommitIndex)
+	fmt.Printf("state loaded: %+v\n", srvstate)
 	s.log.UpdateCommitIndex(srvstate.CommitIndex)
+	s.SetTerm(srvstate.Term)
 	return nil
 }

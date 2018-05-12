@@ -55,6 +55,18 @@ func (l *Log) PreLastLogInfo() (index uint64, term uint64) {
 	return last.Entry.Index, last.Entry.Term
 }
 
+func (l *Log) LastLogIndex() uint64 {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if len(l.entries) == 0 {
+		return 0
+	}
+
+	last := l.entries[len(l.entries)-1]
+	return last.Entry.Index
+}
+
 func (l *Log) LastLogInfo() (index uint64, term uint64) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -136,6 +148,20 @@ func (l *Log) AppendEntry(lu *LogEntry) error {
 	return nil
 }
 
+func (l *Log) RefreshLog() error {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.file.Truncate(0) // clear file content
+	for _, lu := range l.entries {
+		_, err := lu.dump(l.file)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (l *Log) UpdateCommitIndex(index uint64) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -150,7 +176,7 @@ func (l *Log) UpdateCommitIndex(index uint64) {
 
 	lastindex := l.entries[len(l.entries)-1].Entry.GetIndex()
 	if index > lastindex {
-		fmt.Printf("Local log is too old or index to commit is invalid. %d:%d", index, lastindex)
+		fmt.Printf("Local log is too old or index to commit is invalid,%d:%d\n", index, lastindex)
 		return
 	}
 

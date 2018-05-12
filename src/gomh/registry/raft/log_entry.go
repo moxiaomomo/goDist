@@ -3,7 +3,7 @@ package raft
 import (
 	"bufio"
 	"encoding/binary"
-	//"fmt"
+	//	"fmt"
 	"github.com/golang/protobuf/proto"
 	pb "gomh/registry/raft/proto"
 	"os"
@@ -71,6 +71,7 @@ func (l *LogEntry) load(file *os.File, startIndex int64) (indexend int64, err er
 		return -1, nil
 	}
 
+	l.Entry = &pb.LogEntry{}
 	err = proto.Unmarshal(data, l.Entry)
 	if err != nil {
 		return -1, err

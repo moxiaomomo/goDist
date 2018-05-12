@@ -9,7 +9,6 @@ import (
 	"gomh/util"
 	"google.golang.org/grpc"
 	"io/ioutil"
-	"math"
 	"math/rand"
 	"os"
 	"path"
@@ -65,19 +64,26 @@ func NewServer(name, path, confPath string) (Server, error) {
 	return s, nil
 }
 
-func (s *server) InitAppendEntry() {
-	s.appendEntryRespCnt = 0
+func (s *server) SetTerm(term uint64) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.currentTerm = term
 }
 
 func (s *server) IncrAppendEntryResp() {
 	s.appendEntryRespCnt += 1
 }
 
+func (s *server) QuorumSize() int {
+	return len(s.peers)/2 + 1
+}
+
 func (s *server) CanCommitLog() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	return s.appendEntryRespCnt >= int(math.Ceil(float64(len(s.peers)/2)))
+	return s.appendEntryRespCnt >= s.QuorumSize()
 }
 
 func (s *server) IsRunning() bool {
@@ -134,6 +140,14 @@ func (s *server) SetState(state string) {
 	s.state = state
 }
 
+func (s *server) VoteForSelf() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.voteGrantedNum = 1 // vote for itself
+	s.peers[s.conf.Host].SetVoteRequestState(VoteGranted)
+}
+
 func (s *server) Init() error {
 	if s.IsRunning() {
 		return fmt.Errorf("server has been running with state:%d", s.State())
@@ -168,7 +182,7 @@ func (s *server) Init() error {
 	if err != nil {
 		return fmt.Errorf("raft load srvstate error: %s", err)
 	}
-	_, s.currentTerm = s.log.LastCommitInfo()
+	//_, s.currentTerm = s.log.LastCommitInfo()
 	s.SetState(Initiated)
 	return nil
 }
@@ -264,9 +278,9 @@ func (s *server) candidateLoop() {
 			if s.State() != Candidate {
 				return
 			}
-			s.currentTerm += 1   // candidate term to increased by 1
-			s.voteGrantedNum = 1 // vote for itself
-			s.peers[s.conf.Host].SetVoteRequestState(VoteGranted)
+			s.currentTerm += 1 // candidate term to increased by 1
+			s.VoteForSelf()
+			lindex, lterm := s.log.LastLogInfo()
 			for _, p := range s.peers {
 				if s.conf.Host == p.Host {
 					continue
@@ -274,14 +288,18 @@ func (s *server) candidateLoop() {
 				r := &RequestVoteRequest{
 					peer:          p,
 					Term:          s.currentTerm,
-					LastLogIndex:  2,
-					LastLogTerm:   2,
+					LastLogIndex:  lindex,
+					LastLogTerm:   lterm,
 					CandidateName: s.conf.CandidateName,
 				}
 				RequestVoteMeCli(s, r)
 			}
+			if s.VoteGrantedNum() >= s.QuorumSize() {
+				s.SetState(Leader)
+			} else {
+				t.Reset(time.Duration(150+rand.Intn(150)) * time.Millisecond)
+			}
 
-			t.Reset(time.Duration(150+rand.Intn(150)) * time.Millisecond)
 		case isStop := <-s.stopped:
 			if isStop {
 				s.SetState(Stopped)
@@ -302,6 +320,8 @@ func (s *server) followerLoop() {
 			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*2 {
 				s.IncrTermForvote()
 				s.SetState(Candidate)
+			} else {
+				s.FlushState()
 			}
 			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
 		case isStop := <-s.stopped:
@@ -314,13 +334,21 @@ func (s *server) followerLoop() {
 }
 
 func (s *server) leaderLoop() {
-	s.InitAppendEntry()
-	lentries := s.log.GetLogEntries(len(s.log.entries)-1, len(s.log.entries))
+	s.appendEntryRespCnt = 1
+	lindex, lterm := s.log.LastLogInfo()
+	entry := &pb.LogEntry{
+		Index:       lindex + 1,
+		Term:        s.currentTerm,
+		Commandname: "nop",
+		Command:     []byte(""),
+	}
+	s.log.AppendEntry(&LogEntry{Entry: entry})
+
 	for _, p := range s.peers {
 		if s.conf.Host == p.Host {
 			continue
 		}
-		RequestAppendEntriesCli(s, p, lentries)
+		RequestAppendEntriesCli(s, p, []*pb.LogEntry{entry}, lindex, lterm)
 	}
 	if s.CanCommitLog() {
 		index, _ := s.log.LastLogInfo()
@@ -337,11 +365,15 @@ func (s *server) leaderLoop() {
 				return
 			}
 			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval {
+				s.appendEntryRespCnt = 1
 				for _, p := range s.peers {
 					if s.conf.Host == p.Host {
 						continue
 					}
-					RequestAppendEntriesCli(s, p, []*LogEntry{})
+					RequestAppendEntriesCli(s, p, []*pb.LogEntry{}, 0, 0)
+				}
+				if !s.CanCommitLog() {
+					s.SetState(Candidate)
 				}
 			}
 			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
