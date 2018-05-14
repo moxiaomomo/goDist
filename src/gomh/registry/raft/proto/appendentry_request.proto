@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package proto;
 
+import "log_entry.proto";
+
 service AppendEntries {
     rpc AppendEntries(AppendEntriesReuqest) returns (AppendEntriesResponse) {}
 }
@@ -12,7 +14,8 @@ message AppendEntriesReuqest {
     uint64 PreLogTerm = 3;
     uint64 CommitIndex = 4;
     string LeaderName = 5;
-    repeated LogEntry Entries = 6;
+    string LeaderHost = 6;
+    repeated LogEntry Entries = 7;
 }
 
 message AppendEntriesResponse {

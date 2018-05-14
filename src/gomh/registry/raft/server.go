@@ -148,6 +148,22 @@ func (s *server) VoteForSelf() {
 	s.peers[s.conf.Host].SetVoteRequestState(VoteGranted)
 }
 
+func (s *server) IsServerMember(host string) bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if _, ok := s.peers[host]; ok {
+		return true
+	}
+	return false
+}
+
+func (s *server) RegisterCommands() {
+	RegisterCommand(&DefaultJoinCommand{})
+	RegisterCommand(&DefaultLeaveCommand{})
+	RegisterCommand(&NOPCommand{})
+}
+
 // Init steps:
 // check if running or initiated before
 // load configuration file
@@ -189,6 +205,8 @@ func (s *server) Init() error {
 		return fmt.Errorf("raft load srvstate error: %s", err)
 	}
 
+	s.RegisterCommands()
+
 	s.SetState(Initiated)
 	return nil
 }
@@ -211,11 +229,14 @@ func (s *server) Start() error {
 
 	s.SetState(Follower)
 
-	loopch := make(chan int)
-	go func() {
-		defer func() { loopch <- 1 }()
-		s.ListenAndServe()
-	}()
+	//loopch := make(chan int)
+	//go func() {
+	//	defer func() { loopch <- 1 }()
+	go s.ListenAndServe()
+	//}()
+
+	go s.StartClientServe()
+
 	s.loop()
 	return nil
 }
@@ -224,7 +245,6 @@ func (s *server) ListenAndServe() {
 	server := grpc.NewServer()
 	pb.RegisterRequestVoteServer(server, &RequestVoteImp{server: s})
 	pb.RegisterAppendEntriesServer(server, &AppendEntriesImp{server: s})
-	//pb.RegisterHeartbeatServer(server, &SendHeartbeatImp{server: s})
 
 	fmt.Printf("To listen on %s\n", s.conf.Host)
 	address, err := net.Listen("tcp", s.conf.Host)
@@ -264,6 +284,31 @@ func (s *server) loadConf() error {
 	}
 
 	return nil
+}
+
+func (s *server) writeConf() error {
+	confpath := path.Join(s.path, "raft.cfg")
+	if s.confPath != "" {
+		confpath = path.Join(s.path, s.confPath)
+	}
+
+	s.conf.PeerHosts = []string{}
+	for _, p := range s.peers {
+		s.conf.PeerHosts = append(s.conf.PeerHosts, p.Host)
+	}
+
+	f, err := os.OpenFile(confpath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	d, err := json.Marshal(s.conf)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write([]byte(d))
+	return err
 }
 
 func (s *server) loop() {
@@ -399,6 +444,9 @@ func (s *server) leaderLoop() {
 }
 
 func (s *server) AddPeer(name string, connectionInfo string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	if s.peers[name] != nil {
 		return nil
 	}
@@ -409,6 +457,10 @@ func (s *server) AddPeer(name string, connectionInfo string) error {
 
 		s.peers[peer.Name] = peer
 	}
+
+	// to flush configuration
+	fmt.Println("To rewrite configuration to persistent storage.")
+	_ = s.writeConf()
 
 	return nil
 }

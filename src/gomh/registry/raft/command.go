@@ -19,7 +19,8 @@ func init() {
 }
 
 type CommandApply interface {
-	Apply(Context) (interface{}, error)
+	//	Apply(Context) (interface{}, error)
+	Apply(Server) (interface{}, error)
 }
 
 type CommandEncoder interface {

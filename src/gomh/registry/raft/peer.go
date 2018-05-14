@@ -58,6 +58,7 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 		LastLogIndex:  lastLogIndex,
 		LastLogTerm:   lastTerm,
 		CandidateName: p.server.conf.CandidateName,
+		Host:          p.server.conf.Host,
 	}
 	res, err := client.RequestVoteMe(context.Background(), pb)
 
@@ -65,7 +66,7 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 		fmt.Printf("client RequestVoteMe failed, err:%s\n", err)
 		return
 	}
-	fmt.Printf("[requestvote]from:%s to:%s rpcRes:%+v\n", p.server.conf.Host, p.Host, res)
+	//	fmt.Printf("[requestvote]from:%s to:%s rpcRes:%+v\n", p.server.conf.Host, p.Host, res)
 
 	if res.VoteGranted && p.server.State() == Candidate {
 		p.server.IncrVoteGrantedNum()
@@ -105,7 +106,6 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, lindex, lterm uint64
 		fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
 		return
 	}
-	fmt.Printf("[appendentry]from:%s to:%s rpcRes:%+v\n", p.server.conf.Host, p.Host, res)
 
 	if res.Success {
 		p.server.IncrAppendEntryResp()

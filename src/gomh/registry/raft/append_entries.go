@@ -1,7 +1,7 @@
 package raft
 
 import (
-	"fmt"
+	//	"fmt"
 	"golang.org/x/net/context"
 	pb "gomh/registry/raft/proto"
 	"gomh/util"
@@ -13,6 +13,7 @@ type AppendEntriesImp struct {
 	mutex  sync.Mutex
 }
 
+// handle appendentries request
 func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntriesReuqest) (*pb.AppendEntriesResponse, error) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
@@ -20,7 +21,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 	pb := &pb.AppendEntriesResponse{
 		Success: false,
 	}
-	if req.GetTerm() >= e.server.currentTerm {
+	if req.GetTerm() >= e.server.currentTerm && e.server.IsServerMember(req.LeaderHost) {
 		e.server.SetState(Follower)
 		e.server.currentTerm = req.GetTerm()
 		e.server.currentLeader = req.GetLeaderName()
@@ -59,12 +60,19 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 	}
 
 	if pb.Success {
+		// update commit index
 		e.server.log.UpdateCommitIndex(req.GetCommitIndex())
+		// apply the command
+		for _, entry := range req.GetEntries() {
+			cmd, _ := NewCommand(entry.Commandname, entry.Command)
+			if cmdcopy, ok := cmd.(CommandApply); ok {
+				cmdcopy.Apply(e.server)
+			}
+		}
 	}
 	lindex, lterm := e.server.log.LastLogInfo()
 	pb.Index = lindex
 	pb.Term = lterm
 
-	fmt.Printf("to be follower to %s\n", req.LeaderName)
 	return pb, nil
 }
