@@ -5,5 +5,6 @@ type Config struct {
 	CommitIndex   uint64   `json:"commitIndex"`
 	PeerHosts     []string `json:"peerHosts"`
 	Host          string   `json:"host"`
+	Client        string   `json:"client"`
 	CandidateName string   `json:"candidateName"`
 }

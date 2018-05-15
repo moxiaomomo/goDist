@@ -34,7 +34,7 @@ func (s *server) FlushState() error {
 	file, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE, 0600)
 
 	w := bufio.NewWriter(file)
-	w.Write([]byte(d))
+	w.Write([]byte(string(d) + "\n"))
 	w.Flush()
 
 	file.Close()

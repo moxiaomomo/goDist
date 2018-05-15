@@ -189,6 +189,7 @@ func (s *server) Init() error {
 	if err != nil {
 		return fmt.Errorf("raft load config error: %s", err)
 	}
+	fmt.Printf("config: %+v\n", s.conf)
 
 	logpath := path.Join(s.path, "internlog")
 	err = os.Mkdir(logpath, 0600)
@@ -198,7 +199,6 @@ func (s *server) Init() error {
 	if err = s.log.LogInit(fmt.Sprintf("%s/%s%s", logpath, s.conf.LogPrefix, s.conf.CandidateName)); err != nil {
 		return fmt.Errorf("raft-log initiation error: %s", err)
 	}
-	fmt.Printf("%+v\n", s.log.entries)
 
 	err = s.LoadState()
 	if err != nil {
@@ -246,7 +246,7 @@ func (s *server) ListenAndServe() {
 	pb.RegisterRequestVoteServer(server, &RequestVoteImp{server: s})
 	pb.RegisterAppendEntriesServer(server, &AppendEntriesImp{server: s})
 
-	fmt.Printf("To listen on %s\n", s.conf.Host)
+	fmt.Printf("listen internal rpc address: %s\n", s.conf.Host)
 	address, err := net.Listen("tcp", s.conf.Host)
 	if err != nil {
 		panic(err)
@@ -393,7 +393,7 @@ func (s *server) leaderLoop() {
 	entry := &pb.LogEntry{
 		Index:       lindex + 1,
 		Term:        s.currentTerm,
-		Commandname: "nop",
+		Commandname: "raft:nop",
 		Command:     []byte(""),
 	}
 	s.log.AppendEntry(&LogEntry{Entry: entry})
@@ -429,6 +429,8 @@ func (s *server) leaderLoop() {
 				}
 				if !s.CanCommitLog() {
 					s.SetState(Candidate)
+				} else {
+					s.FlushState()
 				}
 			}
 			if s.State() == Leader {
@@ -445,7 +447,6 @@ func (s *server) leaderLoop() {
 
 func (s *server) AddPeer(name string, connectionInfo string) error {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
 
 	if s.peers[name] != nil {
 		return nil
@@ -462,6 +463,33 @@ func (s *server) AddPeer(name string, connectionInfo string) error {
 	fmt.Println("To rewrite configuration to persistent storage.")
 	_ = s.writeConf()
 
+	s.mutex.Unlock()
+
+	lindex, _ := s.log.LastLogInfo()
+	cmdinfo := &DefaultJoinCommand{
+		Name:           name,
+		ConnectionInfo: connectionInfo,
+	}
+	cmdjson, _ := json.Marshal(cmdinfo)
+	entry := &pb.LogEntry{
+		Index:       lindex + 1,
+		Term:        s.currentTerm,
+		Commandname: "raft:join",
+		Command:     []byte(cmdjson),
+	}
+	s.log.AppendEntry(&LogEntry{Entry: entry})
+	s.log.UpdateCommitIndex(lindex + 1)
+	s.FlushState()
+
+	if s.State() == Leader {
+		for idx, _ := range s.peers {
+			if s.conf.Host == s.peers[idx].Host {
+				continue
+			}
+			//fmt.Printf("to notice peer to addpeer: %s\n", s.peers[idx].Host)
+			s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, 0, 0)
+		}
+	}
 	return nil
 }
 

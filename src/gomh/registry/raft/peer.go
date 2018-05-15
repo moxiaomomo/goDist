@@ -63,7 +63,7 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 	res, err := client.RequestVoteMe(context.Background(), pb)
 
 	if err != nil {
-		fmt.Printf("client RequestVoteMe failed, err:%s\n", err)
+		//		fmt.Printf("client RequestVoteMe failed, err:%s\n", err)
 		return
 	}
 	//	fmt.Printf("[requestvote]from:%s to:%s rpcRes:%+v\n", p.server.conf.Host, p.Host, res)
@@ -97,6 +97,7 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, lindex, lterm uint64
 		PreLogTerm:  lterm,
 		CommitIndex: p.server.log.CommitIndex(),
 		LeaderName:  p.server.conf.Host,
+		LeaderHost:  p.server.conf.Host,
 		Entries:     entries,
 	}
 
@@ -123,6 +124,7 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, lindex, lterm uint64
 			PreLogTerm:  res.Term,
 			CommitIndex: p.server.log.CommitIndex(),
 			LeaderName:  p.server.conf.Host,
+			LeaderHost:  p.server.conf.Host,
 			Entries:     el,
 		}
 

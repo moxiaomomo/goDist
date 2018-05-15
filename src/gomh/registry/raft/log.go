@@ -43,6 +43,13 @@ func (l *Log) LastCommitInfo() (index uint64, term uint64) {
 	return last.Entry.Index, last.Entry.Term
 }
 
+func (l *Log) IsEmpty() bool {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	return len(l.entries) == 0
+}
+
 func (l *Log) PreLastLogInfo() (index uint64, term uint64) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
