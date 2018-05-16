@@ -134,7 +134,7 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, lindex, lterm uint64
 			fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
 			return
 		} else {
-			fmt.Printf("synclog res: %+v %t %d %d\n", req, res.Success, res.Index, res.Term)
+			fmt.Printf("synclog res: %s %+v\n", p.Host, res)
 		}
 		if res.Success {
 			p.server.IncrAppendEntryResp()

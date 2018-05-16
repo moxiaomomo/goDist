@@ -48,8 +48,8 @@ type Server interface {
 	State() string
 	CanCommitLog() bool
 
-	AddPeer(name string, connectionInfo string) error
-	RemovePeer(name string) error
+	AddPeer(name string, host string) error
+	RemovePeer(name string, host string) error
 }
 
 func NewServer(name, path, confPath string) (Server, error) {
@@ -370,7 +370,7 @@ func (s *server) followerLoop() {
 			if s.State() != Follower {
 				return
 			}
-			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*2 {
+			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*3 {
 				s.IncrTermForvote()
 				s.SetState(Candidate)
 			} else {
@@ -445,18 +445,18 @@ func (s *server) leaderLoop() {
 	}
 }
 
-func (s *server) AddPeer(name string, connectionInfo string) error {
+func (s *server) AddPeer(name string, host string) error {
 	s.mutex.Lock()
 
-	if s.peers[name] != nil {
+	if s.peers[host] != nil {
+		s.mutex.Unlock()
 		return nil
 	}
 
 	if s.name != name {
 		ti := time.Duration(s.heartbeatInterval) * time.Millisecond
-		peer := NewPeer(s, name, connectionInfo, ti)
-
-		s.peers[peer.Name] = peer
+		peer := NewPeer(s, name, host, ti)
+		s.peers[host] = peer
 	}
 
 	// to flush configuration
@@ -465,47 +465,70 @@ func (s *server) AddPeer(name string, connectionInfo string) error {
 
 	s.mutex.Unlock()
 
-	lindex, _ := s.log.LastLogInfo()
-	cmdinfo := &DefaultJoinCommand{
-		Name:           name,
-		ConnectionInfo: connectionInfo,
-	}
-	cmdjson, _ := json.Marshal(cmdinfo)
-	entry := &pb.LogEntry{
-		Index:       lindex + 1,
-		Term:        s.currentTerm,
-		Commandname: "raft:join",
-		Command:     []byte(cmdjson),
-	}
-	s.log.AppendEntry(&LogEntry{Entry: entry})
-	s.log.UpdateCommitIndex(lindex + 1)
-	s.FlushState()
-
 	if s.State() == Leader {
+		lindex, _ := s.log.LastLogInfo()
+		cmdinfo := &DefaultJoinCommand{
+			Name: name,
+			Host: host,
+		}
+		cmdjson, _ := json.Marshal(cmdinfo)
+		entry := &pb.LogEntry{
+			Index:       lindex + 1,
+			Term:        s.currentTerm,
+			Commandname: "raft:join",
+			Command:     []byte(cmdjson),
+		}
+		s.log.AppendEntry(&LogEntry{Entry: entry})
+		s.log.UpdateCommitIndex(lindex + 1)
+		s.FlushState()
+
 		for idx, _ := range s.peers {
 			if s.conf.Host == s.peers[idx].Host {
 				continue
 			}
-			//fmt.Printf("to notice peer to addpeer: %s\n", s.peers[idx].Host)
 			s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, 0, 0)
 		}
 	}
 	return nil
 }
 
-func (s *server) RemovePeer(name string) error {
-	if name == s.name {
-		return nil
-	}
-
+func (s *server) RemovePeer(name string, host string) error {
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	peer := s.peers[name]
-	if peer == nil {
+	if s.peers[host] == nil {
+		s.mutex.Unlock()
 		return nil
 	}
 
-	delete(s.peers, name)
+	delete(s.peers, host)
+
+	// to flush configuration
+	fmt.Println("To rewrite configuration to persistent storage.")
+	_ = s.writeConf()
+	s.mutex.Unlock()
+
+	if s.State() == Leader {
+		lindex, _ := s.log.LastLogInfo()
+		cmdinfo := &DefaultLeaveCommand{
+			Name: name,
+			Host: host,
+		}
+		cmdjson, _ := json.Marshal(cmdinfo)
+		entry := &pb.LogEntry{
+			Index:       lindex + 1,
+			Term:        s.currentTerm,
+			Commandname: "raft:leave",
+			Command:     []byte(cmdjson),
+		}
+		s.log.AppendEntry(&LogEntry{Entry: entry})
+		s.log.UpdateCommitIndex(lindex + 1)
+		s.FlushState()
+
+		for idx, _ := range s.peers {
+			if s.conf.Host == s.peers[idx].Host {
+				continue
+			}
+			s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, 0, 0)
+		}
+	}
 	return nil
 }

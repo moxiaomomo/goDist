@@ -10,8 +10,8 @@ type JoinCommand interface {
 }
 
 type DefaultJoinCommand struct {
-	Name           string `json:"name"`
-	ConnectionInfo string `json:"connectioninfo"`
+	Name string `json:"name"`
+	Host string `json:"connectioninfo"`
 }
 
 type LeaveCommand interface {
@@ -21,6 +21,7 @@ type LeaveCommand interface {
 
 type DefaultLeaveCommand struct {
 	Name string `json:"name"`
+	Host string `json:"host"`
 }
 
 type NOPCommand struct {
@@ -31,7 +32,7 @@ func (c *DefaultJoinCommand) CommandName() string {
 }
 
 func (c *DefaultJoinCommand) Apply(server Server) (interface{}, error) {
-	err := server.AddPeer(c.Name, c.ConnectionInfo)
+	err := server.AddPeer(c.Name, c.Host)
 	return []byte("join"), err
 }
 
@@ -44,7 +45,7 @@ func (c *DefaultLeaveCommand) CommandName() string {
 }
 
 func (c *DefaultLeaveCommand) Apply(server Server) (interface{}, error) {
-	err := server.RemovePeer(c.Name)
+	err := server.RemovePeer(c.Name, c.Host)
 	return []byte("leave"), err
 }
 

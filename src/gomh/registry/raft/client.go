@@ -15,7 +15,12 @@ func JoinHandler(w http.ResponseWriter, r *http.Request, s *server) {
 }
 
 func LeaveHandler(w http.ResponseWriter, r *http.Request, s *server) {
-
+	if s.State() == Leader {
+		r.ParseForm()
+		s.RemovePeer(r.Form["name"][0], r.Form["host"][0])
+	} else {
+		// TODO: pass this request to the leader
+	}
 }
 
 func (s *server) StartClientServe() {
