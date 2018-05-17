@@ -62,6 +62,17 @@ func (l *Log) PreLastLogInfo() (index uint64, term uint64) {
 	return last.Entry.Index, last.Entry.Term
 }
 
+func (l *Log) FirstLogIndex() uint64 {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if len(l.entries) == 0 {
+		return 0
+	}
+
+	return l.entries[0].Entry.Index
+}
+
 func (l *Log) LastLogIndex() uint64 {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()

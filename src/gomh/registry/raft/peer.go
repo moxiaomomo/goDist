@@ -13,6 +13,7 @@ type Peer struct {
 	server           *server
 	Name             string
 	Host             string
+	Client           string
 	voteRequestState int
 
 	lastActivity      time.Time
@@ -51,6 +52,7 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 		fmt.Errorf("dail rpc failed, err: %s\n", err)
 		return
 	}
+	defer conn.Close()
 
 	client := pb.NewRequestVoteClient(conn)
 	pb := &pb.VoteRequest{
@@ -77,7 +79,7 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 	return
 }
 
-func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, lindex, lterm uint64) {
+func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lterm uint64) {
 	if p.server.State() != Leader {
 		fmt.Println("only leader can request append entries.")
 		return
@@ -88,20 +90,23 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, lindex, lterm uint64
 		fmt.Printf("dail rpc failed, err: %s\n", err)
 		return
 	}
+	defer conn.Close()
 
 	client := pb.NewAppendEntriesClient(conn)
 
 	req := &pb.AppendEntriesReuqest{
-		Term:        p.server.currentTerm,
-		PreLogIndex: lindex,
-		PreLogTerm:  lterm,
-		CommitIndex: p.server.log.CommitIndex(),
-		LeaderName:  p.server.conf.Host,
-		LeaderHost:  p.server.conf.Host,
-		Entries:     entries,
+		Term:          p.server.currentTerm,
+		FirstLogIndex: sindex,
+		PreLogIndex:   lindex,
+		PreLogTerm:    lterm,
+		CommitIndex:   p.server.log.CommitIndex(),
+		LeaderName:    p.server.conf.Host,
+		LeaderHost:    p.server.conf.Host,
+		Entries:       entries,
 	}
 
 	res, err := client.AppendEntries(context.Background(), req)
+	// fmt.Printf("response from %s\n", p.Host)
 
 	if err != nil {
 		fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
@@ -119,13 +124,14 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, lindex, lterm uint64
 			el = append(el, e.Entry)
 		}
 		req := &pb.AppendEntriesReuqest{
-			Term:        p.server.currentTerm,
-			PreLogIndex: res.Index,
-			PreLogTerm:  res.Term,
-			CommitIndex: p.server.log.CommitIndex(),
-			LeaderName:  p.server.conf.Host,
-			LeaderHost:  p.server.conf.Host,
-			Entries:     el,
+			Term:          p.server.currentTerm,
+			FirstLogIndex: sindex,
+			PreLogIndex:   res.Index,
+			PreLogTerm:    res.Term,
+			CommitIndex:   p.server.log.CommitIndex(),
+			LeaderName:    p.server.conf.Host,
+			LeaderHost:    p.server.conf.Host,
+			Entries:       el,
 		}
 
 		res, err = client.AppendEntries(context.Background(), req)

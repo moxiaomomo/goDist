@@ -10,12 +10,13 @@ service AppendEntries {
 
 message AppendEntriesReuqest {
     uint64 Term = 1;
-    uint64 PreLogIndex = 2;
-    uint64 PreLogTerm = 3;
-    uint64 CommitIndex = 4;
-    string LeaderName = 5;
-    string LeaderHost = 6;
-    repeated LogEntry Entries = 7;
+    uint64 FirstLogIndex = 2;
+    uint64 PreLogIndex = 3;
+    uint64 PreLogTerm = 4;
+    uint64 CommitIndex = 5;
+    string LeaderName = 6;
+    string LeaderHost = 7;
+    repeated LogEntry Entries = 8;
 }
 
 message AppendEntriesResponse {

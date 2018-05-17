@@ -389,6 +389,7 @@ func (s *server) followerLoop() {
 func (s *server) leaderLoop() {
 	// to request append entry as a new leader is elected
 	s.appendEntryRespCnt = 1
+	findex := s.log.FirstLogIndex()
 	lindex, lterm := s.log.LastLogInfo()
 	entry := &pb.LogEntry{
 		Index:       lindex + 1,
@@ -402,7 +403,7 @@ func (s *server) leaderLoop() {
 		if s.conf.Host == s.peers[idx].Host {
 			continue
 		}
-		s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, lindex, lterm)
+		s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
 	}
 	if s.CanCommitLog() {
 		index, _ := s.log.LastLogInfo()
@@ -420,12 +421,14 @@ func (s *server) leaderLoop() {
 				return
 			}
 			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval {
+				findex := s.log.FirstLogIndex()
+				lindex, lterm := s.log.LastLogInfo()
 				s.appendEntryRespCnt = 1
 				for idx, _ := range s.peers {
 					if s.conf.Host == s.peers[idx].Host {
 						continue
 					}
-					s.peers[idx].RequestAppendEntries([]*pb.LogEntry{}, 0, 0)
+					s.peers[idx].RequestAppendEntries([]*pb.LogEntry{}, findex, lindex, lterm)
 				}
 				if !s.CanCommitLog() {
 					s.SetState(Candidate)
@@ -478,23 +481,14 @@ func (s *server) AddPeer(name string, host string) error {
 			Commandname: "raft:join",
 			Command:     []byte(cmdjson),
 		}
-		s.log.AppendEntry(&LogEntry{Entry: entry})
-		s.log.UpdateCommitIndex(lindex + 1)
-		s.FlushState()
-
-		for idx, _ := range s.peers {
-			if s.conf.Host == s.peers[idx].Host {
-				continue
-			}
-			s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, 0, 0)
-		}
+		s.onMemberChanged(entry)
 	}
 	return nil
 }
 
 func (s *server) RemovePeer(name string, host string) error {
 	s.mutex.Lock()
-	if s.peers[host] == nil {
+	if s.peers[host] == nil || s.conf.Host == host {
 		s.mutex.Unlock()
 		return nil
 	}
@@ -519,16 +513,19 @@ func (s *server) RemovePeer(name string, host string) error {
 			Commandname: "raft:leave",
 			Command:     []byte(cmdjson),
 		}
-		s.log.AppendEntry(&LogEntry{Entry: entry})
-		s.log.UpdateCommitIndex(lindex + 1)
-		s.FlushState()
 
-		for idx, _ := range s.peers {
-			if s.conf.Host == s.peers[idx].Host {
-				continue
-			}
-			s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, 0, 0)
-		}
+		s.onMemberChanged(entry)
 	}
 	return nil
+}
+
+func (s *server) onMemberChanged(entry *pb.LogEntry) {
+	findex := s.log.FirstLogIndex()
+	lindex, lterm := s.log.LastLogInfo()
+	for idx, _ := range s.peers {
+		if s.conf.Host == s.peers[idx].Host {
+			continue
+		}
+		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
+	}
 }

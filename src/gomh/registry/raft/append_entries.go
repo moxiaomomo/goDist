@@ -2,7 +2,7 @@ package raft
 
 import (
 	//	"encoding/json"
-	"fmt"
+	//	"fmt"
 	"golang.org/x/net/context"
 	pb "gomh/registry/raft/proto"
 	"gomh/util"
@@ -20,42 +20,69 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 	defer e.mutex.Unlock()
 
 	reqentries := req.GetEntries()
+	isFullLog := false
+	if len(reqentries) > 0 {
+		isFullLog = req.GetFirstLogIndex() == reqentries[0].GetIndex()
+	}
 	lindex, _ := e.server.log.LastLogInfo()
+
 	pb := &pb.AppendEntriesResponse{
 		Success: false,
+		Index:   lindex,
+		Term:    e.server.currentTerm,
 	}
 
+	// peer host should be in the configuration
 	if e.server.IsServerMember(req.LeaderHost) {
+		// update current server state
 		e.server.SetState(Follower)
 		e.server.currentTerm = req.GetTerm()
 		e.server.currentLeader = req.GetLeaderName()
 		e.server.leaderAcceptTime = util.GetTimestampInMilli()
 
-		if req.GetPreLogIndex() > lindex {
+		// 1.if isfulllog, just overwrite log file
+		if isFullLog {
+			e.server.log.entries = []*LogEntry{}
+			for _, entry := range reqentries {
+				e.server.log.entries = append(e.server.log.entries, &LogEntry{Entry: entry})
+			}
+			e.server.log.RefreshLog()
+			pb.Success = true
+			// 2.if req-entries's startindex is later than current server's lastlogindex,
+			//   of current server's log is empty,
+			//   to request re-send fulllog
+		} else if req.GetFirstLogIndex() > lindex || e.server.log.IsEmpty() {
 			pb.Success = false
-			pb.Index = lindex
+			pb.Index = 0
+			// 3.if req-entries's prelogindex is later than current server's lastlogindex,
+			//   to request re-send logs from the position of lindex
+		} else if req.GetPreLogIndex() > lindex {
+			pb.Success = false
+			// 4. if req-entries's prelogindex is earlier than current server's lastlogindex,
+			//    truncate reqentries and append into local logfile
 		} else if req.GetPreLogIndex() < lindex {
 			backindex := len(e.server.log.entries) - 1
 			for i := backindex; i >= 0; i-- {
-				if e.server.log.entries[i].Entry.GetIndex() <= req.GetPreLogIndex() {
+				if e.server.log.entries[i].Entry.GetIndex() == req.GetPreLogIndex() {
 					backindex = i
 					break
 				}
 			}
-			e.server.log.entries = e.server.log.entries[0 : backindex+1]
-			e.server.log.RefreshLog()
-			if e.server.log.entries[backindex].Entry.GetIndex() == req.GetPreLogIndex() {
+			// 5.if backindex<0, something imnormal...just to request re-send fulllog
+			if backindex < 0 {
+				pb.Success = false
+				pb.Index = 0
+			} else {
+				e.server.log.entries = e.server.log.entries[0 : backindex+1]
+				e.server.log.RefreshLog()
 				for _, entry := range reqentries {
-					fmt.Printf("tosynclog: %+v\n", entry)
 					e.server.log.AppendEntry(&LogEntry{Entry: entry})
 				}
-
 				pb.Success = true
-			} else {
-				pb.Index = e.server.log.entries[backindex].Entry.GetIndex()
-				pb.Success = false
 			}
-		} else if req.GetPreLogIndex() == lindex && (len(reqentries) > 0 || (len(reqentries) == 0 && !e.server.log.IsEmpty())) {
+			// 6.if req-entries's prelogindex is equal to current server's lastlogindex,
+			//   just to append reqentries into logfile
+		} else if req.GetPreLogIndex() == lindex {
 			for _, entry := range reqentries {
 				e.server.log.AppendEntry(&LogEntry{Entry: entry})
 			}
@@ -63,6 +90,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 		}
 	}
 
+	// if appendentries succeeded, update commitindex and apply command
 	if pb.Success {
 		// update commit index
 		e.server.log.UpdateCommitIndex(req.GetCommitIndex())
@@ -73,14 +101,11 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 				cmdcopy.Apply(e.server)
 			}
 		}
+		pb.Index = e.server.log.LastLogIndex()
 	}
 
-	//	fmt.Printf("idx:%d:%d h:%s m:%t pb:%+v en:%+v\n", req.GetPreLogIndex(), lindex,
-	//		req.LeaderHost, e.server.IsServerMember(req.LeaderHost), pb, reqentries)
-
-	lindex, lterm := e.server.log.LastLogInfo()
-	pb.Index = lindex
-	pb.Term = lterm
+	//fmt.Printf("idx:%d:%d h:%s m:%t pb:%+v en:%+v\n", req.GetPreLogIndex(), lindex,
+	//	req.LeaderHost, e.server.IsServerMember(req.LeaderHost), pb, reqentries)
 
 	return pb, nil
 }
