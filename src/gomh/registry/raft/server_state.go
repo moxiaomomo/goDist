@@ -30,25 +30,28 @@ func (s *server) FlushState() error {
 	}
 
 	logpath := path.Join(s.path, "internlog")
-	fname := fmt.Sprintf("%s/state-%s", logpath, s.conf.CandidateName)
+	fname := fmt.Sprintf("%s/state-%s", logpath, s.conf.Name)
 	file, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
 
 	w := bufio.NewWriter(file)
 	w.Write([]byte(string(d) + "\n"))
 	w.Flush()
 
-	file.Close()
 	return nil
 }
 
 // load data from file
 func (s *server) LoadState() error {
 	logpath := path.Join(s.path, "internlog")
-	fname := fmt.Sprintf("%s/state-%s", logpath, s.name)
+	fname := fmt.Sprintf("%s/state-%s", logpath, s.conf.Name)
 
 	b, err := ioutil.ReadFile(fname)
 	if err != nil {
-		return nil
+		return err
 	}
 	//s.srvstate = ServerState{}
 	srvstate := &ServerState{}

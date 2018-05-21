@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"golang.org/x/net/context"
 	pb "gomh/registry/raft/proto"
+	"gomh/util"
 	"google.golang.org/grpc"
 	"sync"
 	"time"
@@ -20,6 +21,11 @@ type Peer struct {
 	heartbeatInterval time.Duration
 
 	mutex sync.RWMutex
+}
+
+type AppendLogRespChan struct {
+	Resp     *pb.AppendEntriesResponse
+	PeerHost string
 }
 
 func NewPeer(server *server, name, host string, heartbeatInterval time.Duration) *Peer {
@@ -50,6 +56,9 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 	conn, err := grpc.Dial(p.Host, grpc.WithInsecure())
 	if err != nil {
 		fmt.Errorf("dail rpc failed, err: %s\n", err)
+		if conn != nil {
+			conn.Close()
+		}
 		return
 	}
 	defer conn.Close()
@@ -59,7 +68,7 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 		Term:          p.server.currentTerm,
 		LastLogIndex:  lastLogIndex,
 		LastLogTerm:   lastTerm,
-		CandidateName: p.server.conf.CandidateName,
+		CandidateName: p.server.conf.Name,
 		Host:          p.server.conf.Host,
 	}
 	res, err := client.RequestVoteMe(context.Background(), pb)
@@ -88,9 +97,14 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 	conn, err := grpc.Dial(p.Host, grpc.WithInsecure())
 	if err != nil {
 		fmt.Printf("dail rpc failed, err: %s\n", err)
+		if conn != nil {
+			conn.Close()
+		}
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		conn.Close()
+	}()
 
 	client := pb.NewAppendEntriesClient(conn)
 
@@ -113,8 +127,13 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 		return
 	}
 
+	p.server.leaderAcceptTime = util.GetTimestampInMilli()
 	if res.Success {
-		p.server.IncrAppendEntryResp()
+		resp := &AppendLogRespChan{
+			Resp:     res,
+			PeerHost: p.Host,
+		}
+		p.server.ch <- resp
 	} else {
 		el := []*pb.LogEntry{}
 		for _, e := range p.server.log.entries {
@@ -136,14 +155,18 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 
 		res, err = client.AppendEntries(context.Background(), req)
 
+		resp := &AppendLogRespChan{
+			Resp:     res,
+			PeerHost: p.Host,
+		}
+
 		if err != nil {
 			fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
-			return
+			//	p.server.ch <- resp
 		} else {
 			fmt.Printf("synclog res: %s %+v\n", p.Host, res)
-		}
-		if res.Success {
-			p.server.IncrAppendEntryResp()
+			p.server.leaderAcceptTime = util.GetTimestampInMilli()
+			p.server.ch <- resp
 		}
 	}
 

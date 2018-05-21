@@ -29,7 +29,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 	pb := &pb.AppendEntriesResponse{
 		Success: false,
 		Index:   lindex,
-		Term:    e.server.currentTerm,
+		Term:    req.GetTerm(),
 	}
 
 	// peer host should be in the configuration
@@ -49,7 +49,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 			e.server.log.RefreshLog()
 			pb.Success = true
 			// 2.if req-entries's startindex is later than current server's lastlogindex,
-			//   of current server's log is empty,
+			//   or the current server's log is empty,
 			//   to request re-send fulllog
 		} else if req.GetFirstLogIndex() > lindex || e.server.log.IsEmpty() {
 			pb.Success = false

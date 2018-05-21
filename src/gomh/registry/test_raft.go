@@ -14,7 +14,7 @@ var (
 func main() {
 	flag.Parse()
 
-	raftsvr, err := raft.NewServer("testsvr", "raft", *confPath)
+	raftsvr, err := raft.NewServer("raft", *confPath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
