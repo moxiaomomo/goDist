@@ -102,9 +102,7 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 		}
 		return
 	}
-	defer func() {
-		conn.Close()
-	}()
+	defer conn.Close()
 
 	client := pb.NewAppendEntriesClient(conn)
 
