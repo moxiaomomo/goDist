@@ -92,15 +92,20 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 
 	// if appendentries succeeded, update commitindex and apply command
 	if pb.Success {
-		// update commit index
-		e.server.log.UpdateCommitIndex(req.GetCommitIndex())
+		cmiindex, _ := e.server.log.LastCommitInfo()
 		// apply the command
 		for _, entry := range req.GetEntries() {
+			if entry.GetIndex() <= cmiindex {
+				continue
+			}
 			cmd, _ := NewCommand(entry.Commandname, entry.Command)
 			if cmdcopy, ok := cmd.(CommandApply); ok {
 				cmdcopy.Apply(e.server)
 			}
 		}
+		// update commit index
+		e.server.log.UpdateCommitIndex(req.GetCommitIndex())
+
 		pb.Index = e.server.log.LastLogIndex()
 	}
 

@@ -38,6 +38,7 @@ type server struct {
 
 	leaderAcceptTime  int64
 	heartbeatInterval int64
+	lastSnapshotTime  int64
 
 	ch       chan interface{}
 	syncpeer map[string]int
@@ -60,7 +61,8 @@ func NewServer(path, confPath string) (Server, error) {
 		confPath:          confPath,
 		state:             Stopped,
 		log:               newLog(),
-		heartbeatInterval: 1000, // 1000ms
+		heartbeatInterval: 300, // 300ms
+		lastSnapshotTime:  util.GetTimestampInMilli(),
 		syncpeer:          make(map[string]int),
 	}
 	return s, nil
@@ -267,7 +269,7 @@ func (s *server) Start() error {
 
 	go s.ListenAndServe()
 	go s.StartClientServe()
-	go s.ticktimer()
+	go s.TickTask()
 
 	s.loop()
 	return nil
@@ -344,12 +346,17 @@ func (s *server) writeConf() error {
 	return err
 }
 
-func (s *server) ticktimer() {
-	t := time.NewTimer(time.Duration(150+rand.Intn(150)) * time.Millisecond)
+func (s *server) TickTask() {
+	t := time.NewTimer(300 * time.Millisecond)
 	for {
 		select {
 		case <-t.C:
 			s.FlushState()
+			nowt := util.GetTimestampInMilli()
+			if nowt-s.lastSnapshotTime > 5000 {
+				s.onSnapShotting()
+				s.lastSnapshotTime = nowt
+			}
 			t.Reset(300 * time.Millisecond)
 		}
 	}
@@ -457,22 +464,23 @@ func (s *server) leaderLoop() {
 		case c := <-s.ch:
 			switch d := c.(type) {
 			case *AppendLogRespChan:
-				if d.Resp != nil && d.Resp.Success && d.Resp.Term == s.currentTerm {
-					s.syncpeer[d.PeerHost] = 1
-				} else {
-					s.syncpeer[d.PeerHost] = 0
-				}
-				respStatus := s.SyncPeerStatusOrReset()
-				fmt.Println(respStatus)
-				if respStatus != -1 {
-					s.leaderAcceptTime = util.GetTimestampInMilli()
-					if respStatus == 1 {
-						index, _ := s.log.LastLogInfo()
-						s.log.UpdateCommitIndex(index)
-						fmt.Printf("to commit log, index:%d term:%d\n", index, s.currentTerm)
+				if d.Failed == false {
+					if d.Resp != nil && d.Resp.Success && d.Resp.Term == s.currentTerm {
+						s.syncpeer[d.PeerHost] = 1
+					} else {
+						s.syncpeer[d.PeerHost] = 0
+					}
+					respStatus := s.SyncPeerStatusOrReset()
+					if respStatus != -1 {
+						s.leaderAcceptTime = util.GetTimestampInMilli()
+						if respStatus == 1 {
+							index, _ := s.log.LastLogInfo()
+							s.log.UpdateCommitIndex(index)
+							//						fmt.Printf("to commit log, index:%d term:%d\n", index, s.currentTerm)
+						}
 					}
 				}
-				if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*2 {
+				if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*3 {
 					s.SetState(Candidate)
 				}
 			}
@@ -576,8 +584,46 @@ func (s *server) onMemberChanged(entry *pb.LogEntry) {
 	lindex, lterm := s.log.LastLogInfo()
 	for idx, _ := range s.peers {
 		if s.conf.Host == s.peers[idx].Host {
+			s.log.AppendEntry(&LogEntry{Entry: entry})
 			continue
 		}
 		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
+	}
+}
+
+func (s *server) onSnapShotting() {
+	if s.State() != Leader {
+		return
+	}
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	cmiIndex, _ := s.log.LastCommitInfo()
+	backindex := len(s.log.entries) - 1
+	for i := backindex; i >= 0; i-- {
+		if s.log.entries[i].Entry.GetIndex() < cmiIndex {
+			backindex = i
+			break
+		}
+	}
+	if backindex < 0 {
+		return
+	}
+	s.log.entries = s.log.entries[backindex:len(s.log.entries)]
+	s.log.RefreshLog()
+
+	findex := s.log.FirstLogIndex()
+	lindex, lterm := s.log.LastLogInfo()
+
+	pbentries := [](*pb.LogEntry){}
+	for _, entry := range s.log.entries {
+		pbentries = append(pbentries, entry.Entry)
+	}
+	for idx, _ := range s.peers {
+		if s.conf.Host == s.peers[idx].Host {
+			continue
+		}
+		go s.peers[idx].RequestAppendEntries(pbentries, findex, lindex, lterm)
 	}
 }

@@ -35,11 +35,12 @@ func (l *Log) LastCommitInfo() (index uint64, term uint64) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	if len(l.entries) == 0 {
+	cmiLen := int(l.commitIndex - l.startIndex + 1)
+	if cmiLen <= 0 || len(l.entries) == 0 || cmiLen > len(l.entries) {
 		return 0, 0
 	}
 
-	last := l.entries[l.commitIndex-1]
+	last := l.entries[cmiLen-1]
 	return last.Entry.Index, last.Entry.Term
 }
 
@@ -176,6 +177,9 @@ func (l *Log) RefreshLog() error {
 		if err != nil {
 			return err
 		}
+	}
+	if len(l.entries) > 0 {
+		l.startIndex = l.entries[0].Entry.GetIndex()
 	}
 	return nil
 }

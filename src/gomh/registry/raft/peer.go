@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"golang.org/x/net/context"
 	pb "gomh/registry/raft/proto"
-	"gomh/util"
+	//	"gomh/util"
 	"google.golang.org/grpc"
 	"sync"
 	"time"
@@ -24,6 +24,7 @@ type Peer struct {
 }
 
 type AppendLogRespChan struct {
+	Failed   bool
 	Resp     *pb.AppendEntriesResponse
 	PeerHost string
 }
@@ -120,17 +121,20 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 	res, err := client.AppendEntries(context.Background(), req)
 	// fmt.Printf("response from %s\n", p.Host)
 
+	resp := &AppendLogRespChan{
+		Failed:   false,
+		Resp:     res,
+		PeerHost: p.Host,
+	}
+
 	if err != nil {
+		resp.Failed = true
 		fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
+		p.server.ch <- resp
 		return
 	}
 
-	p.server.leaderAcceptTime = util.GetTimestampInMilli()
 	if res.Success {
-		resp := &AppendLogRespChan{
-			Resp:     res,
-			PeerHost: p.Host,
-		}
 		p.server.ch <- resp
 	} else {
 		el := []*pb.LogEntry{}
@@ -154,16 +158,17 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 		res, err = client.AppendEntries(context.Background(), req)
 
 		resp := &AppendLogRespChan{
+			Failed:   false,
 			Resp:     res,
 			PeerHost: p.Host,
 		}
 
 		if err != nil {
 			fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
-			//	p.server.ch <- resp
+			resp.Failed = true
+			p.server.ch <- resp
 		} else {
 			fmt.Printf("synclog res: %s %+v\n", p.Host, res)
-			p.server.leaderAcceptTime = util.GetTimestampInMilli()
 			p.server.ch <- resp
 		}
 	}
