@@ -1,3 +1,4 @@
 regsvr
 server1
 raft/internlog/*
+!raft/internlog/README
