@@ -69,8 +69,12 @@ func (s *service) RemoveHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(respBody)
 }
 
-func GetServerHandler(w http.ResponseWriter, r *http.Request) {
+func (s *service) GetServerHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
+	if up, ok := r.Form["uripath"]; !ok || len(up) <= 0 {
+		w.Write([]byte("invalid request."))
+		return
+	}
 	uripath := r.Form["uripath"][0]
 
 	if worker, err := GetWorker(uripath); err != nil {
@@ -91,7 +95,5 @@ func RegistryHandler(s *service) {
 
 	s.raftsrv.RegisterHandler("/service/add", s.AddHandler)
 	s.raftsrv.RegisterHandler("/service/remove", s.RemoveHandler)
-	//	http.HandleFunc("/add", func(w http.ResponseWriter, r *http.Request) { AddHandler(w, r, s) })
-	//	http.HandleFunc("/remove", RemoveHandler)
-	//	http.HandleFunc("/get", GetServerHandler)
+	s.raftsrv.RegisterHandler("/service/get", s.GetServerHandler)
 }

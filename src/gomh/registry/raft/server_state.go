@@ -36,6 +36,7 @@ func (s *server) FlushState() error {
 		return err
 	}
 	defer file.Close()
+	file.Truncate(0)
 
 	w := bufio.NewWriter(file)
 	w.Write([]byte(string(d) + "\n"))

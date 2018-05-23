@@ -2,7 +2,7 @@ package handler
 
 import (
 	"errors"
-	"fmt"
+	//	"fmt"
 	"gomh/config"
 	"gomh/util"
 	"gomh/util/logger"
@@ -107,7 +107,6 @@ func AddWorker(w Worker) error {
 	}
 
 	workers.Members[w.UriPath] = append(workers.Members[w.UriPath], w)
-	fmt.Println(workers)
 	return nil
 }
 
