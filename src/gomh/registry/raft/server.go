@@ -10,11 +10,14 @@ import (
 	"google.golang.org/grpc"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
 	"os"
 	"path"
 	"sync"
 	"time"
 )
+
+type HandleFuncType func(w http.ResponseWriter, r *http.Request)
 
 type server struct {
 	mutex   sync.RWMutex
@@ -40,17 +43,23 @@ type server struct {
 	heartbeatInterval int64
 	lastSnapshotTime  int64
 
-	ch       chan interface{}
-	syncpeer map[string]int
+	ch         chan interface{}
+	syncpeer   map[string]int
+	handlefunc map[string]HandleFuncType
 }
 
 type Server interface {
 	Start() error
 	IsRunning() bool
 	State() string
+	CurLeaderExHost() string
 
 	AddPeer(name string, host string) error
 	RemovePeer(name string, host string) error
+
+	RegisterCommand(cmd Command)
+	RegisterHandler(urlpath string, fc HandleFuncType)
+	OnAppendEntry(cmd Command, cmds []byte)
 }
 
 func NewServer(path, confPath string) (Server, error) {
@@ -63,6 +72,7 @@ func NewServer(path, confPath string) (Server, error) {
 		heartbeatInterval: 300, // 300ms
 		lastSnapshotTime:  util.GetTimestampInMilli(),
 		syncpeer:          make(map[string]int),
+		handlefunc:        make(map[string]HandleFuncType),
 	}
 	return s, nil
 }
@@ -129,6 +139,10 @@ func (s *server) State() string {
 	defer s.mutex.Unlock()
 
 	return s.state
+}
+
+func (s *server) CurLeaderExHost() string {
+	return s.currentLeaderExHost
 }
 
 func (s *server) VotedForTerm() uint64 {
@@ -199,6 +213,10 @@ func (s *server) RegisterCommands() {
 	RegisterCommand(&DefaultJoinCommand{})
 	RegisterCommand(&DefaultLeaveCommand{})
 	RegisterCommand(&NOPCommand{})
+}
+
+func (s *server) RegisterCommand(cmd Command) {
+	RegisterCommand(cmd)
 }
 
 // Init steps:
@@ -352,6 +370,7 @@ func (s *server) TickTask() {
 		case <-t.C:
 			s.FlushState()
 			nowt := util.GetTimestampInMilli()
+			// snapshotting every 5 second
 			if nowt-s.lastSnapshotTime > 5000 {
 				s.onSnapShotting()
 				s.lastSnapshotTime = nowt
@@ -446,7 +465,6 @@ func (s *server) leaderLoop() {
 		Command:     []byte(""),
 	}
 	s.log.AppendEntry(&LogEntry{Entry: entry})
-	s.log.UpdateCommitIndex(lindex + 1)
 
 	for idx, _ := range s.peers {
 		if s.conf.Host == s.peers[idx].Host {
@@ -472,10 +490,21 @@ func (s *server) leaderLoop() {
 					respStatus := s.SyncPeerStatusOrReset()
 					if respStatus != -1 {
 						s.leaderAcceptTime = util.GetTimestampInMilli()
-						if respStatus == 1 {
-							index, _ := s.log.LastLogInfo()
-							s.log.UpdateCommitIndex(index)
-							//						fmt.Printf("to commit log, index:%d term:%d\n", index, s.currentTerm)
+					}
+					if respStatus == 1 {
+						lcmiIndex, _ := s.log.LastCommitInfo()
+						lindex, _ := s.log.LastLogInfo()
+						if lindex > lcmiIndex {
+							for _, entry := range s.log.entries {
+								if entry.Entry.GetIndex() <= lcmiIndex {
+									continue
+								}
+								cmd, _ := NewCommand(entry.Entry.Commandname, entry.Entry.Command)
+								if cmdcopy, ok := cmd.(CommandApply); ok {
+									cmdcopy.Apply(s)
+								}
+							}
+							s.log.UpdateCommitIndex(lindex)
 						}
 					}
 				}
@@ -624,5 +653,25 @@ func (s *server) onSnapShotting() {
 			continue
 		}
 		go s.peers[idx].RequestAppendEntries(pbentries, findex, lindex, lterm)
+	}
+}
+
+func (s *server) OnAppendEntry(cmd Command, cmds []byte) {
+	findex := s.log.FirstLogIndex()
+	lindex, lterm := s.log.LastLogInfo()
+
+	entry := &pb.LogEntry{
+		Index:       lindex + 1,
+		Term:        s.currentTerm,
+		Commandname: cmd.CommandName(),
+		Command:     cmds,
+	}
+	s.log.AppendEntry(&LogEntry{Entry: entry})
+
+	for idx, _ := range s.peers {
+		if s.conf.Host == s.peers[idx].Host {
+			continue
+		}
+		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
 	}
 }

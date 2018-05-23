@@ -2,12 +2,17 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/tidwall/gjson"
 	"gomh/registry/handler"
 	"gomh/util/logger"
 	"io/ioutil"
 	"os"
+)
+
+var (
+	confPath = flag.String("confpath", "raft.cfg", "configuration filepath")
 )
 
 func LoadConfig(confPath string) (map[string]interface{}, error) {
@@ -25,12 +30,23 @@ func LoadConfig(confPath string) (map[string]interface{}, error) {
 }
 
 func main() {
-	cfg, err := LoadConfig("config/reg.conf")
+	flag.Parse()
+
+	//	cfg, err := LoadConfig("config/reg.conf")
+	//	if err != nil {
+	//		logger.LogErrorf("Program will exit while loading config failed.")
+	//		os.Exit(1)
+	//	}
+
+	sv, err := handler.NewService(*confPath)
 	if err != nil {
-		logger.LogErrorf("Program will exit while loading config failed.")
+		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	//	listenHost := fmt.Sprintf("%s:%s", cfg["listenhost"], cfg["listenport"])
-	handler.StartRegistryServer(cfg["listenAt"].(string))
+	err = sv.Start()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }

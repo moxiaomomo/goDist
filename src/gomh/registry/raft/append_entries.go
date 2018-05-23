@@ -105,14 +105,27 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 				cmdcopy.Apply(e.server)
 			}
 		}
+		if req.GetCommitIndex() > cmiindex {
+			for _, entry := range e.server.log.entries {
+				if entry.Entry.GetIndex() <= cmiindex || entry.Entry.GetIndex() > req.GetCommitIndex() {
+					continue
+				}
+				cmd, _ := NewCommand(entry.Entry.Commandname, entry.Entry.Command)
+				if cmdcopy, ok := cmd.(CommandApply); ok {
+					cmdcopy.Apply(e.server)
+				}
+			}
+		}
+
 		// update commit index
-		e.server.log.UpdateCommitIndex(req.GetCommitIndex())
-
-		pb.Index = e.server.log.LastLogIndex()
+		lindex := e.server.log.LastLogIndex()
+		if lindex > req.GetCommitIndex() {
+			e.server.log.UpdateCommitIndex(req.GetCommitIndex())
+		} else {
+			e.server.log.UpdateCommitIndex(lindex)
+		}
+		pb.Index = lindex
 	}
-
-	//fmt.Printf("idx:%d:%d h:%s m:%t pb:%+v en:%+v\n", req.GetPreLogIndex(), lindex,
-	//	req.LeaderHost, e.server.IsServerMember(req.LeaderHost), pb, reqentries)
 
 	return pb, nil
 }

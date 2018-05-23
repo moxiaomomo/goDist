@@ -120,7 +120,6 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 	}
 
 	res, err := client.AppendEntries(context.Background(), req)
-	// fmt.Printf("response from %s\n", p.Host)
 
 	resp := &AppendLogRespChan{
 		Failed:   false,

@@ -49,10 +49,16 @@ func (s *server) LoadState() error {
 	logpath := path.Join(s.path, "internlog")
 	fname := fmt.Sprintf("%s/state-%s", logpath, s.conf.Name)
 
+	_, err := os.Stat(fname)
+	if err != nil && os.IsNotExist(err) {
+		return nil
+	}
+
 	b, err := ioutil.ReadFile(fname)
 	if err != nil {
 		return err
 	}
+
 	//s.srvstate = ServerState{}
 	srvstate := &ServerState{}
 	if err = json.Unmarshal(b, srvstate); err != nil {

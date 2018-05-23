@@ -4,13 +4,20 @@ import (
 	"encoding/json"
 	//	"github.com/tidwall/gjson"
 	"fmt"
+	"gomh/registry/raft"
 	"gomh/util"
-	"gomh/util/logger"
+	//	"gomh/util/logger"
 	"net/http"
-	"time"
+	//	"time"
 )
 
-func AddHandler(w http.ResponseWriter, r *http.Request) {
+func (s *service) AddHandler(w http.ResponseWriter, r *http.Request) {
+	if s.raftsrv.State() != raft.Leader {
+		url := fmt.Sprintf("http://%s%s", s.raftsrv.CurLeaderExHost(), r.RequestURI)
+		http.Redirect(w, r, url, http.StatusFound)
+		return
+	}
+
 	r.ParseForm()
 	if host, ok := r.Form["host"]; !ok || len(host) <= 0 {
 		w.Write([]byte("invalid request."))
@@ -19,10 +26,7 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 	host := r.Form["host"][0]
 	uripath := r.Form["uripath"][0]
 
-	regErr := AddWorker(Worker{Host: host, UriPath: uripath, Heartbeat: time.Now().Unix()})
-	if regErr == nil {
-		logger.LogInfof("Suc to register worker: %s\n", host)
-	}
+	_ = s.Add(uripath, host)
 
 	regResp := util.CommonResp{
 		Code:    util.REG_WORKER_OK,
@@ -36,7 +40,13 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(respBody)
 }
 
-func RemoveHandler(w http.ResponseWriter, r *http.Request) {
+func (s *service) RemoveHandler(w http.ResponseWriter, r *http.Request) {
+	if s.raftsrv.State() != raft.Leader {
+		url := fmt.Sprintf("http://%s%s", s.raftsrv.CurLeaderExHost(), r.RequestURI)
+		http.Redirect(w, r, url, http.StatusFound)
+		return
+	}
+
 	r.ParseForm()
 	if host, ok := r.Form["host"]; !ok || len(host) <= 0 {
 		w.Write([]byte("invalid request."))
@@ -45,7 +55,7 @@ func RemoveHandler(w http.ResponseWriter, r *http.Request) {
 	host := r.Form["host"][0]
 	uripath := r.Form["uripath"][0]
 
-	RemoveWorker(Worker{Host: host, UriPath: uripath})
+	_ = s.Remove(uripath, host)
 
 	regResp := util.CommonResp{
 		Code:    util.REG_WORKER_OK,
@@ -73,16 +83,15 @@ func GetServerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func StartRegistryServer(listenHost string) {
-	logger.SetLogLevel(util.LOG_INFO)
+func RegistryHandler(s *service) {
+	//	logger.SetLogLevel(util.LOG_INFO)
 
-	go RemoveWorkerAsTimeout()
+	//	go RemoveWorkerAsTimeout()
 	SetLBPolicy(util.LB_FASTRESP)
 
-	http.HandleFunc("/add", AddHandler)
-	http.HandleFunc("/remove", RemoveHandler)
-	http.HandleFunc("/get", GetServerHandler)
-
-	logger.LogInfof("to start server on port: %s\n", listenHost)
-	http.ListenAndServe(listenHost, nil)
+	s.raftsrv.RegisterHandler("/service/add", s.AddHandler)
+	s.raftsrv.RegisterHandler("/service/remove", s.RemoveHandler)
+	//	http.HandleFunc("/add", func(w http.ResponseWriter, r *http.Request) { AddHandler(w, r, s) })
+	//	http.HandleFunc("/remove", RemoveHandler)
+	//	http.HandleFunc("/get", GetServerHandler)
 }
