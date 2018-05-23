@@ -17,19 +17,19 @@ import (
 )
 
 type server struct {
-	*eventDispatcher
-
 	mutex   sync.RWMutex
 	stopped chan bool
 
 	path  string
 	state string
 
-	currentLeader string
-	currentTerm   uint64
-	confPath      string
+	currentLeaderName   string
+	currentLeaderHost   string
+	currentLeaderExHost string
 
-	transporter    Transporter
+	currentTerm uint64
+	confPath    string
+
 	log            *Log
 	conf           *Config
 	peers          map[string]*Peer
@@ -48,7 +48,6 @@ type Server interface {
 	Start() error
 	IsRunning() bool
 	State() string
-	//	CanCommitLog() bool
 
 	AddPeer(name string, host string) error
 	RemovePeer(name string, host string) error

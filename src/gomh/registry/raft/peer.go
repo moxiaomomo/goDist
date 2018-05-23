@@ -115,6 +115,7 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 		CommitIndex:   p.server.log.CommitIndex(),
 		LeaderName:    p.server.conf.Host,
 		LeaderHost:    p.server.conf.Host,
+		LeaderExHost:  p.server.conf.Client,
 		Entries:       entries,
 	}
 
@@ -152,6 +153,7 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 			CommitIndex:   p.server.log.CommitIndex(),
 			LeaderName:    p.server.conf.Host,
 			LeaderHost:    p.server.conf.Host,
+			LeaderExHost:  p.server.conf.Client,
 			Entries:       el,
 		}
 

@@ -16,7 +16,8 @@ message AppendEntriesReuqest {
     uint64 CommitIndex = 5;
     string LeaderName = 6;
     string LeaderHost = 7;
-    repeated LogEntry Entries = 8;
+    string LeaderExHost = 8;
+    repeated LogEntry Entries = 9;
 }
 
 message AppendEntriesResponse {

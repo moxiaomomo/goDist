@@ -37,7 +37,9 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 		// update current server state
 		e.server.SetState(Follower)
 		e.server.currentTerm = req.GetTerm()
-		e.server.currentLeader = req.GetLeaderName()
+		e.server.currentLeaderName = req.GetLeaderName()
+		e.server.currentLeaderHost = req.GetLeaderHost()
+		e.server.currentLeaderExHost = req.GetLeaderExHost()
 		e.server.leaderAcceptTime = util.GetTimestampInMilli()
 
 		// 1.if isfulllog, just overwrite log file
