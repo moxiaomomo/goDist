@@ -20,8 +20,7 @@ import (
 type HandleFuncType func(w http.ResponseWriter, r *http.Request)
 
 type server struct {
-	mutex   sync.RWMutex
-	stopped chan bool
+	mutex sync.RWMutex
 
 	path  string
 	state string
@@ -29,28 +28,29 @@ type server struct {
 	currentLeaderName   string
 	currentLeaderHost   string
 	currentLeaderExHost string
+	currentTerm         uint64
 
-	currentTerm uint64
-	confPath    string
-
-	log          *Log
-	conf         *Config
-	peers        map[string]*Peer
-	votedForTerm uint64 // vote one peer as a leader in curterm
+	log      *Log
+	conf     *Config
+	confPath string
 
 	lastHeartbeatTime int64
 	lastSnapshotTime  int64
 	heartbeatInterval uint64
+	votedForTerm      uint64 // vote one peer as a leader in curterm
 
+	stopped    chan bool
 	ch         chan interface{}
-	syncpeer   map[string]int
 	handlefunc map[string]HandleFuncType
+
+	peers    map[string]*Peer
+	syncpeer map[string]int
 }
 
 type Server interface {
 	Start() error
-	IsRunning() bool
 	State() string
+	IsRunning() bool
 	CurLeaderExHost() string
 
 	AddPeer(name string, host string) error
@@ -63,7 +63,6 @@ type Server interface {
 
 func NewServer(path, confPath string) (Server, error) {
 	s := &server{
-		//		name:              name,
 		path:              path,
 		confPath:          confPath,
 		state:             Stopped,
@@ -83,10 +82,6 @@ func (s *server) SetTerm(term uint64) {
 	s.currentTerm = term
 }
 
-func (s *server) QuorumSize() int {
-	return len(s.peers)/2 + 1
-}
-
 func (s *server) SyncPeerStatusOrReset() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -101,7 +96,7 @@ func (s *server) SyncPeerStatusOrReset() int {
 		}
 	}
 
-	qsize := s.QuorumSize()
+	qsize := s.quorumSize()
 	if sucCnt >= qsize {
 		s.resetSyncPeer()
 		return 1
@@ -110,12 +105,6 @@ func (s *server) SyncPeerStatusOrReset() int {
 		return 0
 	}
 	return -1
-}
-
-func (s *server) resetSyncPeer() {
-	for k, _ := range s.syncpeer {
-		s.syncpeer[k] = -1
-	}
 }
 
 func (s *server) InitSyncPeer() {
@@ -141,6 +130,9 @@ func (s *server) State() string {
 }
 
 func (s *server) CurLeaderExHost() string {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	return s.currentLeaderExHost
 }
 
@@ -166,6 +158,9 @@ func (s *server) Peers() map[string]*Peer {
 }
 
 func (s *server) IncrTermForvote() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	s.currentTerm += 1
 }
 
@@ -195,13 +190,10 @@ func (s *server) IsServerMember(host string) bool {
 }
 
 func (s *server) IsHeartbeatTimeout() bool {
-	return util.GetTimestampInMilli()-s.lastHeartbeatTime > int64(s.heartbeatInterval*2)
-}
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-func (s *server) RegisterCommands() {
-	RegisterCommand(&DefaultJoinCommand{})
-	RegisterCommand(&DefaultLeaveCommand{})
-	RegisterCommand(&NOPCommand{})
+	return util.GetTimestampInMilli()-s.lastHeartbeatTime > int64(s.heartbeatInterval*2)
 }
 
 func (s *server) RegisterCommand(cmd Command) {
@@ -249,7 +241,10 @@ func (s *server) Init() error {
 		return fmt.Errorf("raft load srvstate error: %s", err)
 	}
 
-	s.RegisterCommands()
+	// register raft commands
+	s.RegisterCommand(&DefaultJoinCommand{})
+	s.RegisterCommand(&DefaultLeaveCommand{})
+	s.RegisterCommand(&NOPCommand{})
 
 	s.SetState(Initiated)
 	return nil
@@ -273,15 +268,15 @@ func (s *server) Start() error {
 
 	s.SetState(Follower)
 
-	go s.ListenAndServe()
-	go s.StartClientServe()
+	go s.StartInternServe()
+	go s.StartExternServe()
 	go s.TickTask()
 
 	s.loop()
 	return nil
 }
 
-func (s *server) ListenAndServe() {
+func (s *server) StartInternServe() {
 	server := grpc.NewServer()
 	pb.RegisterRequestVoteServer(server, &RequestVoteImp{server: s})
 	pb.RegisterAppendEntriesServer(server, &AppendEntriesImp{server: s})
@@ -295,61 +290,6 @@ func (s *server) ListenAndServe() {
 	if err := server.Serve(address); err != nil {
 		panic(err)
 	}
-}
-
-func (s *server) loadConf() error {
-	confpath := path.Join(s.path, "raft.cfg")
-	if s.confPath != "" {
-		confpath = path.Join(s.path, s.confPath)
-	}
-
-	cfg, err := ioutil.ReadFile(confpath)
-	if err != nil {
-		fmt.Errorf("open config file failed, err:%s", err)
-		return nil
-	}
-
-	conf := &Config{}
-	if err = json.Unmarshal(cfg, conf); err != nil {
-		return err
-	}
-	s.conf = conf
-	s.peers = make(map[string]*Peer)
-	for _, c := range s.conf.PeerHosts {
-		s.peers[c] = &Peer{
-			Name:   c,
-			Host:   c,
-			server: s,
-		}
-	}
-	s.ch = make(chan interface{}, len(s.peers)*2)
-
-	return nil
-}
-
-func (s *server) writeConf() error {
-	confpath := path.Join(s.path, "raft.cfg")
-	if s.confPath != "" {
-		confpath = path.Join(s.path, s.confPath)
-	}
-
-	s.conf.PeerHosts = []string{}
-	for _, p := range s.peers {
-		s.conf.PeerHosts = append(s.conf.PeerHosts, p.Host)
-	}
-
-	f, err := os.OpenFile(confpath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, os.ModePerm)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	d, err := json.Marshal(s.conf)
-	if err != nil {
-		return err
-	}
-	_, err = f.Write([]byte(d))
-	return err
 }
 
 func (s *server) TickTask() {
@@ -367,6 +307,97 @@ func (s *server) TickTask() {
 			t.Reset(300 * time.Millisecond)
 		}
 	}
+}
+
+func (s *server) OnAppendEntry(cmd Command, cmds []byte) {
+	findex := s.log.FirstLogIndex()
+	lindex, lterm := s.log.LastLogInfo()
+
+	entry := &pb.LogEntry{
+		Index:       lindex + 1,
+		Term:        s.currentTerm,
+		Commandname: cmd.CommandName(),
+		Command:     cmds,
+	}
+	s.log.AppendEntry(&LogEntry{Entry: entry})
+
+	for idx, _ := range s.peers {
+		if s.conf.Host == s.peers[idx].Host {
+			continue
+		}
+		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
+	}
+}
+
+func (s *server) AddPeer(name string, host string) error {
+	s.mutex.Lock()
+
+	if s.peers[host] != nil {
+		s.mutex.Unlock()
+		return nil
+	}
+
+	if s.conf.Name != name {
+		ti := time.Duration(s.heartbeatInterval) * time.Millisecond
+		peer := NewPeer(s, name, host, ti)
+		s.peers[host] = peer
+	}
+
+	// to flush configuration
+	fmt.Println("To rewrite configuration to persistent storage.")
+	_ = s.writeConf()
+
+	s.mutex.Unlock()
+
+	if s.State() == Leader {
+		lindex, _ := s.log.LastLogInfo()
+		cmdinfo := &DefaultJoinCommand{
+			Name: name,
+			Host: host,
+		}
+		cmdjson, _ := json.Marshal(cmdinfo)
+		entry := &pb.LogEntry{
+			Index:       lindex + 1,
+			Term:        s.currentTerm,
+			Commandname: "raft:join",
+			Command:     []byte(cmdjson),
+		}
+		s.onMemberChanged(entry)
+	}
+	return nil
+}
+
+func (s *server) RemovePeer(name string, host string) error {
+	s.mutex.Lock()
+	if s.peers[host] == nil || s.conf.Host == host {
+		s.mutex.Unlock()
+		return nil
+	}
+
+	delete(s.peers, host)
+
+	// to flush configuration
+	fmt.Println("To rewrite configuration to persistent storage.")
+	_ = s.writeConf()
+	s.mutex.Unlock()
+
+	if s.State() == Leader {
+		lindex, _ := s.log.LastLogInfo()
+		cmdinfo := &DefaultLeaveCommand{
+			Name: name,
+			Host: host,
+		}
+		cmdjson, _ := json.Marshal(cmdinfo)
+		entry := &pb.LogEntry{
+			Index:       lindex + 1,
+			Term:        s.currentTerm,
+			Commandname: "raft:leave",
+			Command:     []byte(cmdjson),
+		}
+
+		s.onMemberChanged(entry)
+	}
+	return nil
 }
 
 func (s *server) loop() {
@@ -415,7 +446,7 @@ func (s *server) candidateLoop() {
 			if s.State() != Candidate {
 				return
 			}
-			s.currentTerm += 1 // candidate term to increased by 1
+			s.IncrTermForvote()
 			s.VoteForSelf()
 			lindex, lterm := s.log.LastLogInfo()
 			for idx, _ := range s.peers {
@@ -443,7 +474,6 @@ func (s *server) followerLoop() {
 				return
 			}
 			if s.IsHeartbeatTimeout() {
-				s.IncrTermForvote()
 				s.SetState(Candidate)
 			}
 			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
@@ -586,93 +616,67 @@ func (s *server) onSnapShotting() {
 	}
 }
 
-func (s *server) OnAppendEntry(cmd Command, cmds []byte) {
-	findex := s.log.FirstLogIndex()
-	lindex, lterm := s.log.LastLogInfo()
-
-	entry := &pb.LogEntry{
-		Index:       lindex + 1,
-		Term:        s.currentTerm,
-		Commandname: cmd.CommandName(),
-		Command:     cmds,
-	}
-	s.log.AppendEntry(&LogEntry{Entry: entry})
-
-	for idx, _ := range s.peers {
-		if s.conf.Host == s.peers[idx].Host {
-			continue
-		}
-		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
+func (s *server) resetSyncPeer() {
+	for k, _ := range s.syncpeer {
+		s.syncpeer[k] = -1
 	}
 }
 
-func (s *server) AddPeer(name string, host string) error {
-	s.mutex.Lock()
+func (s *server) quorumSize() int {
+	return len(s.peers)/2 + 1
+}
 
-	if s.peers[host] != nil {
-		s.mutex.Unlock()
+func (s *server) loadConf() error {
+	confpath := path.Join(s.path, "raft.cfg")
+	if s.confPath != "" {
+		confpath = path.Join(s.path, s.confPath)
+	}
+
+	cfg, err := ioutil.ReadFile(confpath)
+	if err != nil {
+		fmt.Errorf("open config file failed, err:%s", err)
 		return nil
 	}
 
-	if s.conf.Name != name {
-		ti := time.Duration(s.heartbeatInterval) * time.Millisecond
-		peer := NewPeer(s, name, host, ti)
-		s.peers[host] = peer
+	conf := &Config{}
+	if err = json.Unmarshal(cfg, conf); err != nil {
+		return err
 	}
-
-	// to flush configuration
-	fmt.Println("To rewrite configuration to persistent storage.")
-	_ = s.writeConf()
-
-	s.mutex.Unlock()
-
-	if s.State() == Leader {
-		lindex, _ := s.log.LastLogInfo()
-		cmdinfo := &DefaultJoinCommand{
-			Name: name,
-			Host: host,
+	s.conf = conf
+	s.peers = make(map[string]*Peer)
+	for _, c := range s.conf.PeerHosts {
+		s.peers[c] = &Peer{
+			Name:   c,
+			Host:   c,
+			server: s,
 		}
-		cmdjson, _ := json.Marshal(cmdinfo)
-		entry := &pb.LogEntry{
-			Index:       lindex + 1,
-			Term:        s.currentTerm,
-			Commandname: "raft:join",
-			Command:     []byte(cmdjson),
-		}
-		s.onMemberChanged(entry)
 	}
+	s.ch = make(chan interface{}, len(s.peers)*2)
+
 	return nil
 }
 
-func (s *server) RemovePeer(name string, host string) error {
-	s.mutex.Lock()
-	if s.peers[host] == nil || s.conf.Host == host {
-		s.mutex.Unlock()
-		return nil
+func (s *server) writeConf() error {
+	confpath := path.Join(s.path, "raft.cfg")
+	if s.confPath != "" {
+		confpath = path.Join(s.path, s.confPath)
 	}
 
-	delete(s.peers, host)
-
-	// to flush configuration
-	fmt.Println("To rewrite configuration to persistent storage.")
-	_ = s.writeConf()
-	s.mutex.Unlock()
-
-	if s.State() == Leader {
-		lindex, _ := s.log.LastLogInfo()
-		cmdinfo := &DefaultLeaveCommand{
-			Name: name,
-			Host: host,
-		}
-		cmdjson, _ := json.Marshal(cmdinfo)
-		entry := &pb.LogEntry{
-			Index:       lindex + 1,
-			Term:        s.currentTerm,
-			Commandname: "raft:leave",
-			Command:     []byte(cmdjson),
-		}
-
-		s.onMemberChanged(entry)
+	s.conf.PeerHosts = []string{}
+	for _, p := range s.peers {
+		s.conf.PeerHosts = append(s.conf.PeerHosts, p.Host)
 	}
-	return nil
+
+	f, err := os.OpenFile(confpath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	d, err := json.Marshal(s.conf)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write([]byte(d))
+	return err
 }

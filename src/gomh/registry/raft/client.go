@@ -19,7 +19,7 @@ func redirect(w http.ResponseWriter, r *http.Request, s *server) {
 	if err != nil {
 		w.Write([]byte(err.Error()))
 	} else {
-		w.Write([]byte("Member changed OK."))
+		w.Write([]byte("Member changed OK.\n"))
 	}
 }
 
@@ -50,7 +50,7 @@ func (s *server) RegisterHandler(urlpath string, fc HandleFuncType) {
 	s.handlefunc[urlpath] = fc
 }
 
-func (s *server) StartClientServe() {
+func (s *server) StartExternServe() {
 	for url := range s.handlefunc {
 		http.HandleFunc(url, s.handlefunc[url])
 	}

@@ -1,2 +1,4 @@
+raftsvr
+regsvr
 raft/internlog/*
 !raft/internlog/README
