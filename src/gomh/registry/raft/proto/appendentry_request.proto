@@ -14,10 +14,11 @@ message AppendEntriesReuqest {
     uint64 PreLogIndex = 3;
     uint64 PreLogTerm = 4;
     uint64 CommitIndex = 5;
-    string LeaderName = 6;
-    string LeaderHost = 7;
-    string LeaderExHost = 8;
-    repeated LogEntry Entries = 9;
+    uint64 HeartbeatInterval = 6;
+    string LeaderName = 7;
+    string LeaderHost = 8;
+    string LeaderExHost = 9;
+    repeated proto.LogEntry Entries = 10;
 }
 
 message AppendEntriesResponse {

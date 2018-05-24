@@ -38,9 +38,9 @@ type server struct {
 	peers        map[string]*Peer
 	votedForTerm uint64 // vote one peer as a leader in curterm
 
-	lastHeartbeatTime  int64
-	heartbeatInterval int64
+	lastHeartbeatTime int64
 	lastSnapshotTime  int64
+	heartbeatInterval uint64
 
 	ch         chan interface{}
 	syncpeer   map[string]int
@@ -192,6 +192,10 @@ func (s *server) IsServerMember(host string) bool {
 		return true
 	}
 	return false
+}
+
+func (s *server) IsHeartbeatTimeout() bool {
+	return util.GetTimestampInMilli()-s.lastHeartbeatTime > int64(s.heartbeatInterval*2)
 }
 
 func (s *server) RegisterCommands() {
@@ -438,7 +442,7 @@ func (s *server) followerLoop() {
 			if s.State() != Follower {
 				return
 			}
-			if util.GetTimestampInMilli()-s.lastHeartbeatTime > s.heartbeatInterval*3 {
+			if s.IsHeartbeatTimeout() {
 				s.IncrTermForvote()
 				s.SetState(Candidate)
 			}
@@ -507,23 +511,21 @@ func (s *server) leaderLoop() {
 						}
 					}
 				}
-				if util.GetTimestampInMilli()-s.lastHeartbeatTime > s.heartbeatInterval*3 {
+				if s.IsHeartbeatTimeout() {
 					s.SetState(Candidate)
 					t.Stop()
 					return
 				}
 			}
 		case <-t.C:
-			if util.GetTimestampInMilli()-s.lastHeartbeatTime > s.heartbeatInterval {
-				findex := s.log.FirstLogIndex()
-				lindex, lterm := s.log.LastLogInfo()
-				s.syncpeer[s.conf.Host] = 1
-				for idx, _ := range s.peers {
-					if s.conf.Host == s.peers[idx].Host {
-						continue
-					}
-					go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{}, findex, lindex, lterm)
+			findex := s.log.FirstLogIndex()
+			lindex, lterm := s.log.LastLogInfo()
+			s.syncpeer[s.conf.Host] = 1
+			for idx, _ := range s.peers {
+				if s.conf.Host == s.peers[idx].Host {
+					continue
 				}
+				go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{}, findex, lindex, lterm)
 			}
 			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
 		case isStop := <-s.stopped:
@@ -532,6 +534,75 @@ func (s *server) leaderLoop() {
 				break
 			}
 		}
+	}
+}
+
+func (s *server) onMemberChanged(entry *pb.LogEntry) {
+	findex := s.log.FirstLogIndex()
+	lindex, lterm := s.log.LastLogInfo()
+	for idx, _ := range s.peers {
+		if s.conf.Host == s.peers[idx].Host {
+			s.log.AppendEntry(&LogEntry{Entry: entry})
+			continue
+		}
+		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
+	}
+}
+
+func (s *server) onSnapShotting() {
+	if s.State() != Leader {
+		return
+	}
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	cmiIndex, _ := s.log.LastCommitInfo()
+	backindex := len(s.log.entries) - 1
+	for i := backindex; i >= 0; i-- {
+		if s.log.entries[i].Entry.GetIndex() < cmiIndex {
+			backindex = i
+			break
+		}
+	}
+	if backindex < 0 {
+		return
+	}
+	s.log.entries = s.log.entries[backindex:len(s.log.entries)]
+	s.log.RefreshLog()
+
+	findex := s.log.FirstLogIndex()
+	lindex, lterm := s.log.LastLogInfo()
+
+	pbentries := [](*pb.LogEntry){}
+	for _, entry := range s.log.entries {
+		pbentries = append(pbentries, entry.Entry)
+	}
+	for idx, _ := range s.peers {
+		if s.conf.Host == s.peers[idx].Host {
+			continue
+		}
+		go s.peers[idx].RequestAppendEntries(pbentries, findex, lindex, lterm)
+	}
+}
+
+func (s *server) OnAppendEntry(cmd Command, cmds []byte) {
+	findex := s.log.FirstLogIndex()
+	lindex, lterm := s.log.LastLogInfo()
+
+	entry := &pb.LogEntry{
+		Index:       lindex + 1,
+		Term:        s.currentTerm,
+		Commandname: cmd.CommandName(),
+		Command:     cmds,
+	}
+	s.log.AppendEntry(&LogEntry{Entry: entry})
+
+	for idx, _ := range s.peers {
+		if s.conf.Host == s.peers[idx].Host {
+			continue
+		}
+		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
 	}
 }
 
@@ -604,73 +675,4 @@ func (s *server) RemovePeer(name string, host string) error {
 		s.onMemberChanged(entry)
 	}
 	return nil
-}
-
-func (s *server) onMemberChanged(entry *pb.LogEntry) {
-	findex := s.log.FirstLogIndex()
-	lindex, lterm := s.log.LastLogInfo()
-	for idx, _ := range s.peers {
-		if s.conf.Host == s.peers[idx].Host {
-			s.log.AppendEntry(&LogEntry{Entry: entry})
-			continue
-		}
-		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
-	}
-}
-
-func (s *server) onSnapShotting() {
-	if s.State() != Leader {
-		return
-	}
-
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	cmiIndex, _ := s.log.LastCommitInfo()
-	backindex := len(s.log.entries) - 1
-	for i := backindex; i >= 0; i-- {
-		if s.log.entries[i].Entry.GetIndex() < cmiIndex {
-			backindex = i
-			break
-		}
-	}
-	if backindex < 0 {
-		return
-	}
-	s.log.entries = s.log.entries[backindex:len(s.log.entries)]
-	s.log.RefreshLog()
-
-	findex := s.log.FirstLogIndex()
-	lindex, lterm := s.log.LastLogInfo()
-
-	pbentries := [](*pb.LogEntry){}
-	for _, entry := range s.log.entries {
-		pbentries = append(pbentries, entry.Entry)
-	}
-	for idx, _ := range s.peers {
-		if s.conf.Host == s.peers[idx].Host {
-			continue
-		}
-		go s.peers[idx].RequestAppendEntries(pbentries, findex, lindex, lterm)
-	}
-}
-
-func (s *server) OnAppendEntry(cmd Command, cmds []byte) {
-	findex := s.log.FirstLogIndex()
-	lindex, lterm := s.log.LastLogInfo()
-
-	entry := &pb.LogEntry{
-		Index:       lindex + 1,
-		Term:        s.currentTerm,
-		Commandname: cmd.CommandName(),
-		Command:     cmds,
-	}
-	s.log.AppendEntry(&LogEntry{Entry: entry})
-
-	for idx, _ := range s.peers {
-		if s.conf.Host == s.peers[idx].Host {
-			continue
-		}
-		go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{entry}, findex, lindex, lterm)
-	}
 }

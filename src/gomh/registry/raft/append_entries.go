@@ -41,6 +41,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 		e.server.currentLeaderHost = req.GetLeaderHost()
 		e.server.currentLeaderExHost = req.GetLeaderExHost()
 		e.server.lastHeartbeatTime = util.GetTimestampInMilli()
+		e.server.heartbeatInterval = req.GetHeartbeatInterval()
 
 		// 1.if isfulllog, just overwrite log file
 		if isFullLog {
@@ -92,7 +93,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 		}
 	}
 
-	// if appendentries succeeded, update commitindex and apply command
+	// if appendentries succeeded, apply commands and update commited index
 	if pb.Success {
 		cmiindex, _ := e.server.log.LastCommitInfo()
 		// apply the command
@@ -117,7 +118,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 			}
 		}
 
-		// update commit index
+		// update commited index
 		lindex := e.server.log.LastLogIndex()
 		if lindex > req.GetCommitIndex() {
 			e.server.log.UpdateCommitIndex(req.GetCommitIndex())

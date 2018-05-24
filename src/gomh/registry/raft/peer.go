@@ -84,6 +84,7 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 		Resp:     res,
 		PeerHost: p.Host,
 	}
+
 	if err != nil {
 		resp.Failed = true
 		p.server.ch <- resp
@@ -112,15 +113,16 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 	client := pb.NewAppendEntriesClient(conn)
 
 	req := &pb.AppendEntriesReuqest{
-		Term:          p.server.currentTerm,
-		FirstLogIndex: sindex,
-		PreLogIndex:   lindex,
-		PreLogTerm:    lterm,
-		CommitIndex:   p.server.log.CommitIndex(),
-		LeaderName:    p.server.conf.Host,
-		LeaderHost:    p.server.conf.Host,
-		LeaderExHost:  p.server.conf.Client,
-		Entries:       entries,
+		Term:              p.server.currentTerm,
+		FirstLogIndex:     sindex,
+		PreLogIndex:       lindex,
+		PreLogTerm:        lterm,
+		CommitIndex:       p.server.log.CommitIndex(),
+		LeaderName:        p.server.conf.Host,
+		LeaderHost:        p.server.conf.Host,
+		LeaderExHost:      p.server.conf.Client,
+		HeartbeatInterval: p.server.heartbeatInterval,
+		Entries:           entries,
 	}
 
 	res, err := client.AppendEntries(context.Background(), req)
@@ -149,15 +151,16 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 			el = append(el, e.Entry)
 		}
 		req := &pb.AppendEntriesReuqest{
-			Term:          p.server.currentTerm,
-			FirstLogIndex: sindex,
-			PreLogIndex:   res.Index,
-			PreLogTerm:    res.Term,
-			CommitIndex:   p.server.log.CommitIndex(),
-			LeaderName:    p.server.conf.Host,
-			LeaderHost:    p.server.conf.Host,
-			LeaderExHost:  p.server.conf.Client,
-			Entries:       el,
+			Term:              p.server.currentTerm,
+			FirstLogIndex:     sindex,
+			PreLogIndex:       res.Index,
+			PreLogTerm:        res.Term,
+			CommitIndex:       p.server.log.CommitIndex(),
+			LeaderName:        p.server.conf.Host,
+			LeaderHost:        p.server.conf.Host,
+			LeaderExHost:      p.server.conf.Client,
+			HeartbeatInterval: p.server.heartbeatInterval,
+			Entries:           el,
 		}
 
 		res, err = client.AppendEntries(context.Background(), req)
