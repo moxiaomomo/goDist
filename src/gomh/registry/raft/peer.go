@@ -23,6 +23,12 @@ type Peer struct {
 	mutex sync.RWMutex
 }
 
+type RequestVoteRespChan struct {
+	Failed   bool
+	Resp     *pb.VoteResponse
+	PeerHost string
+}
+
 type AppendLogRespChan struct {
 	Failed   bool
 	Resp     *pb.AppendEntriesResponse
@@ -74,19 +80,17 @@ func (p *Peer) RequestVoteMe(lastLogIndex, lastTerm uint64) {
 	}
 	res, err := client.RequestVoteMe(context.Background(), pb)
 
+	resp := &RequestVoteRespChan{
+		Resp:     res,
+		PeerHost: p.Host,
+	}
 	if err != nil {
-		//		fmt.Printf("client RequestVoteMe failed, err:%s\n", err)
-		return
-	}
-	//	fmt.Printf("[requestvote]from:%s to:%s rpcRes:%+v\n", p.server.conf.Host, p.Host, res)
-
-	if res.VoteGranted && p.server.State() == Candidate {
-		p.server.IncrVoteGrantedNum()
-		p.SetVoteRequestState(VoteGranted)
+		resp.Failed = true
+		p.server.ch <- resp
 	} else {
-		p.SetVoteRequestState(VoteRejected)
+		resp.Failed = false
+		p.server.ch <- resp
 	}
-	return
 }
 
 func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lterm uint64) {

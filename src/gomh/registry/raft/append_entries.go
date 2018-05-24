@@ -40,7 +40,7 @@ func (e *AppendEntriesImp) AppendEntries(ctx context.Context, req *pb.AppendEntr
 		e.server.currentLeaderName = req.GetLeaderName()
 		e.server.currentLeaderHost = req.GetLeaderHost()
 		e.server.currentLeaderExHost = req.GetLeaderExHost()
-		e.server.leaderAcceptTime = util.GetTimestampInMilli()
+		e.server.lastHeartbeatTime = util.GetTimestampInMilli()
 
 		// 1.if isfulllog, just overwrite log file
 		if isFullLog {

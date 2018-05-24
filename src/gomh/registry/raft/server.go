@@ -33,13 +33,12 @@ type server struct {
 	currentTerm uint64
 	confPath    string
 
-	log            *Log
-	conf           *Config
-	peers          map[string]*Peer
-	voteGrantedNum int
-	votedForTerm   uint64 // vote one peer as a leader in curterm
+	log          *Log
+	conf         *Config
+	peers        map[string]*Peer
+	votedForTerm uint64 // vote one peer as a leader in curterm
 
-	leaderAcceptTime  int64
+	lastHeartbeatTime  int64
 	heartbeatInterval int64
 	lastSnapshotTime  int64
 
@@ -159,25 +158,11 @@ func (s *server) SetVotedForTerm(term uint64) {
 	s.votedForTerm = term
 }
 
-func (s *server) VoteGrantedNum() int {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	return s.voteGrantedNum
-}
-
 func (s *server) Peers() map[string]*Peer {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	return s.peers
-}
-
-func (s *server) IncrVoteGrantedNum() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	s.voteGrantedNum += 1
 }
 
 func (s *server) IncrTermForvote() {
@@ -195,7 +180,7 @@ func (s *server) VoteForSelf() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.voteGrantedNum = 1 // vote for itself
+	s.syncpeer[s.conf.Host] = 1
 	s.peers[s.conf.Host].SetVoteRequestState(VoteGranted)
 }
 
@@ -403,6 +388,25 @@ func (s *server) candidateLoop() {
 	t := time.NewTimer(time.Duration(150+rand.Intn(150)) * time.Millisecond)
 	for s.State() == Candidate {
 		select {
+		case c := <-s.ch:
+			switch d := c.(type) {
+			case *RequestVoteRespChan:
+				if d.Failed == false {
+					if d.Resp.VoteGranted {
+						s.syncpeer[d.PeerHost] = 1
+						s.peers[d.PeerHost].SetVoteRequestState(VoteGranted)
+					} else {
+						s.syncpeer[d.PeerHost] = 0
+						s.peers[d.PeerHost].SetVoteRequestState(VoteRejected)
+					}
+				}
+				respStatus := s.SyncPeerStatusOrReset()
+				if respStatus == 1 {
+					s.SetState(Leader)
+					t.Stop()
+					return
+				}
+			}
 		case <-t.C:
 			if s.State() != Candidate {
 				return
@@ -414,14 +418,9 @@ func (s *server) candidateLoop() {
 				if s.conf.Host == s.peers[idx].Host {
 					continue
 				}
-				s.peers[idx].RequestVoteMe(lindex, lterm)
+				go s.peers[idx].RequestVoteMe(lindex, lterm)
 			}
-			if s.VoteGrantedNum() >= s.QuorumSize() {
-				s.SetState(Leader)
-			} else {
-				t.Reset(time.Duration(150+rand.Intn(150)) * time.Millisecond)
-			}
-
+			t.Reset(time.Duration(150+rand.Intn(150)) * time.Millisecond)
 		case isStop := <-s.stopped:
 			if isStop {
 				s.SetState(Stopped)
@@ -439,7 +438,7 @@ func (s *server) followerLoop() {
 			if s.State() != Follower {
 				return
 			}
-			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*3 {
+			if util.GetTimestampInMilli()-s.lastHeartbeatTime > s.heartbeatInterval*3 {
 				s.IncrTermForvote()
 				s.SetState(Candidate)
 			}
@@ -474,7 +473,7 @@ func (s *server) leaderLoop() {
 	}
 
 	// send heartbeat as leader state
-	s.leaderAcceptTime = util.GetTimestampInMilli()
+	s.lastHeartbeatTime = util.GetTimestampInMilli()
 	t := time.NewTimer(time.Duration(s.heartbeatInterval) * time.Millisecond)
 	for s.State() == Leader {
 		select {
@@ -489,7 +488,7 @@ func (s *server) leaderLoop() {
 					}
 					respStatus := s.SyncPeerStatusOrReset()
 					if respStatus != -1 {
-						s.leaderAcceptTime = util.GetTimestampInMilli()
+						s.lastHeartbeatTime = util.GetTimestampInMilli()
 					}
 					if respStatus == 1 {
 						lcmiIndex, _ := s.log.LastCommitInfo()
@@ -508,12 +507,14 @@ func (s *server) leaderLoop() {
 						}
 					}
 				}
-				if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval*3 {
+				if util.GetTimestampInMilli()-s.lastHeartbeatTime > s.heartbeatInterval*3 {
 					s.SetState(Candidate)
+					t.Stop()
+					return
 				}
 			}
 		case <-t.C:
-			if util.GetTimestampInMilli()-s.leaderAcceptTime > s.heartbeatInterval {
+			if util.GetTimestampInMilli()-s.lastHeartbeatTime > s.heartbeatInterval {
 				findex := s.log.FirstLogIndex()
 				lindex, lterm := s.log.LastLogInfo()
 				s.syncpeer[s.conf.Host] = 1
@@ -524,9 +525,7 @@ func (s *server) leaderLoop() {
 					go s.peers[idx].RequestAppendEntries([]*pb.LogEntry{}, findex, lindex, lterm)
 				}
 			}
-			if s.State() == Leader {
-				t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
-			}
+			t.Reset(time.Duration(s.heartbeatInterval) * time.Millisecond)
 		case isStop := <-s.stopped:
 			if isStop {
 				s.SetState(Stopped)
