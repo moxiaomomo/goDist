@@ -135,7 +135,7 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 
 	if err != nil {
 		resp.Failed = true
-		fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
+		//		fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
 		p.server.ch <- resp
 		return
 	}
@@ -172,11 +172,11 @@ func (p *Peer) RequestAppendEntries(entries []*pb.LogEntry, sindex, lindex, lter
 		}
 
 		if err != nil {
-			fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
+			//			fmt.Printf("leader reqeust AppendEntries failed, err:%s\n", err)
 			resp.Failed = true
 			p.server.ch <- resp
 		} else {
-			fmt.Printf("synclog res: %s %+v\n", p.Host, res)
+			fmt.Printf("Appendentries succeeded: %s %+v\n", p.Host, res)
 			p.server.ch <- resp
 		}
 	}

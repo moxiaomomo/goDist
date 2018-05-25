@@ -8,7 +8,6 @@ import (
 
 func redirect(w http.ResponseWriter, r *http.Request, s *server) {
 	url := fmt.Sprintf("http://%s%s", s.currentLeaderExHost, r.RequestURI)
-	fmt.Println(url)
 	req, err := http.NewRequest("POST", url, nil)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
