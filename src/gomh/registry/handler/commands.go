@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"gomh/registry/raft"
+	raft "github.com/moxiaomomo/goRaft"
 	"time"
 )
 

@@ -2,8 +2,7 @@ package handler
 
 import (
 	"encoding/json"
-	//	"fmt"
-	"gomh/registry/raft"
+	raft "github.com/moxiaomomo/goRaft"
 	"sync"
 )
 
@@ -56,7 +55,7 @@ func (s *service) Start() error {
 }
 
 func NewService(confPath string) (*service, error) {
-	raftsvr, err := raft.NewServer("raft", confPath)
+	raftsvr, err := raft.NewServer("/opt/raft/", confPath)
 	if err != nil {
 		return nil, err
 	}

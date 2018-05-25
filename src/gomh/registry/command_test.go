@@ -1,12 +1,13 @@
-package main
+package registry
 
 import (
 	"fmt"
-	"gomh/registry/raft"
+	raft "github.com/moxiaomomo/goRaft"
 	"reflect"
+	"testing"
 )
 
-func main() {
+func Test_command(t *testing.T) {
 	raft.RegisterCommand(&raft.DefaultJoinCommand{})
 	raft.RegisterCommand(&raft.DefaultLeaveCommand{})
 	raft.RegisterCommand(&raft.NOPCommand{})

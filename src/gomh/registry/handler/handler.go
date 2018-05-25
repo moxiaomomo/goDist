@@ -2,13 +2,10 @@ package handler
 
 import (
 	"encoding/json"
-	//	"github.com/tidwall/gjson"
 	"fmt"
-	"gomh/registry/raft"
+	raft "github.com/moxiaomomo/goRaft"
 	"gomh/util"
-	//	"gomh/util/logger"
 	"net/http"
-	//	"time"
 )
 
 func (s *service) AddHandler(w http.ResponseWriter, r *http.Request) {

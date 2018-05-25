@@ -1,4 +1,4 @@
-package main
+package registry
 
 import (
 	"errors"
@@ -9,6 +9,7 @@ import (
 	"gomh/util/logger"
 	"io/ioutil"
 	"os"
+	"testing"
 )
 
 var (
@@ -29,7 +30,7 @@ func LoadConfig(confPath string) (map[string]interface{}, error) {
 	return m, nil
 }
 
-func main() {
+func Test_registry(t *testing.T) {
 	flag.Parse()
 
 	//	cfg, err := LoadConfig("config/reg.conf")
