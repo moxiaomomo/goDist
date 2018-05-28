@@ -1,16 +1,8 @@
 package handler
 
 import (
-	"fmt"
-	pb "gomh/proto/greeter"
 	"gomh/util/logger"
-	"io/ioutil"
 	"net/http"
-	"net/url"
-
-	"github.com/tidwall/gjson"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 )
 
 func InitHandlers() {

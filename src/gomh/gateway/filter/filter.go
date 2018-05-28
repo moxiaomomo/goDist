@@ -35,9 +35,9 @@ func (f DefaultFilter) Init() error {
 }
 
 func (f DefaultFilter) AsBegin(c Context) (FilterResp, error) {
-	return &FilterResp{}, nil
+	return FilterResp{}, nil
 }
 
 func (f DefaultFilter) AsEnd(c Context) (FilterResp, error) {
-	return &FilterResp{}, nil
+	return FilterResp{}, nil
 }
