@@ -1,20 +1,21 @@
 package filter
 
 import (
-	"gomh/gateway/util"
 	"time"
+
+	tbucket "github.com/moxiaomomo/token-bucket"
 )
 
 // RateLimitFilter rate-limiting filter
 type RateLimitFilter struct {
 	DefaultFilter
-	globalRL *util.TokenBucket
+	globalRL *tbucket.TokenBucket
 }
 
 // Init filter initialization
 func (f *RateLimitFilter) Init() error {
 	if f.globalRL == nil {
-		rl, err := util.NewTokenBucket(1000, time.Second)
+		rl, err := tbucket.NewTokenBucket(1000, time.Second)
 		if err != nil {
 			return err
 		}

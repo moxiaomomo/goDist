@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	pb "gomh/proto/greeter"
 	"gomh/util/logger"
 	"io/ioutil"
@@ -16,9 +15,8 @@ import (
 func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	logger.LogDebug("To call SayHello.")
 
-	url, _ := url.Parse("http://127.0.0.1:8338/get?uripath=/hello")
-
-	fmt.Println(url.String())
+	// TODO: read config from configfile
+	url, _ := url.Parse("http://127.0.0.1:4000/service/get?uripath=/srv/hello")
 	workRes, err := http.Get(url.String())
 	if err != nil {
 		w.Write([]byte("out of service."))
@@ -27,7 +25,7 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	result, _ := ioutil.ReadAll(workRes.Body)
 	workRes.Body.Close()
 	svrHost := gjson.Get(string(result), "data").Get("host").String()
-	logger.LogInfof("togrpc:%+v %s\v", string(result), svrHost)
+	logger.LogInfof("togrpc:%+v %s\n", string(result), svrHost)
 
 	//	timer := ProcTimer{}
 	//	timer.OnStart()

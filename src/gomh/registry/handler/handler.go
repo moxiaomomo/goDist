@@ -16,24 +16,30 @@ func (s *service) AddHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.ParseForm()
-	if host, ok := r.Form["host"]; !ok || len(host) <= 0 {
-		w.Write([]byte("invalid request."))
-		return
-	}
-	host := r.Form["host"][0]
-	uripath := r.Form["uripath"][0]
-
-	_ = s.Add(uripath, host)
-
 	regResp := util.CommonResp{
 		Code:    util.REG_WORKER_OK,
 		Message: "ok",
 	}
+
+	r.ParseForm()
+	if host, ok := r.Form["host"]; !ok || len(host) <= 0 {
+		regResp.Code = util.REG_WORKER_FAILED
+		regResp.Message = "invalid request"
+	} else {
+		host := r.Form["host"][0]
+		uripath := r.Form["uripath"][0]
+
+		err := s.Add(uripath, host)
+		if err != nil {
+			regResp.Code = util.REG_WORKER_FAILED
+			regResp.Message = err.Error()
+		}
+	}
+
 	respBody, err := json.Marshal(regResp)
 	if err != nil {
-		w.Write([]byte("internel server error."))
-		return
+		regResp.Code = util.REG_WORKER_FAILED
+		regResp.Message = "internel server error"
 	}
 	w.Write(respBody)
 }

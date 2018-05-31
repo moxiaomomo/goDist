@@ -13,14 +13,9 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"strconv"
 
 	"github.com/tidwall/gjson"
 	"google.golang.org/grpc"
-)
-
-var (
-	port = flag.String("port", "9000", "listen port")
 )
 
 func handler(conn *net.Conn) error {
@@ -52,7 +47,7 @@ func LoadConfig(confPath string) (map[string]interface{}, string, error) {
 }
 
 func main() {
-	cfg, cfgraw, err := LoadConfig("config/reg.conf")
+	cfg, _, err := LoadConfig("config/reg.conf")
 	if err != nil {
 		logger.LogErrorf("Program will exit while loading config failed.")
 		os.Exit(1)
@@ -61,36 +56,27 @@ func main() {
 	flag.Parse()
 	logger.SetLogLevel(util.LOG_INFO)
 
-	portInt, err := strconv.Atoi(*port)
-	if err != nil {
-		logger.LogError(err.Error())
-		os.Exit(-1)
-	}
-
 	lip := util.GetLocalIP()
 	if len(lip) == 0 {
 		logger.LogError("Cannot get local ip.")
 		os.Exit(-1)
 	}
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", portInt))
+	ln, err := net.Listen("tcp", cfg["listenat"].(string))
 	if err != nil {
 		logger.LogError(err.Error())
 		os.Exit(-1)
 	}
 
-	svrnode := gjson.Get(cfgraw, "nodes").Array()[0]
-	fmt.Printf("%+v\n", svrnode)
-	svrHost := fmt.Sprintf("%s:%s", svrnode.String(), cfg["listenport"])
-	err = sutil.Register(lip, portInt, "/hello", svrHost)
+	err = sutil.Register("/srv/hello", cfg["lbhost"].(string), cfg["listenat"].(string))
 	if err != nil {
-		logger.LogError(err.Error())
+		logger.LogError(err)
 		os.Exit(-1)
 	} else {
 		logger.LogInfo("Register worker succeeded.")
 	}
 
-	logger.LogInfof("to run server on port: %d\n", portInt)
+	logger.LogInfof("to run server on addr: %s\n", cfg["listenat"].(string))
 	svr := grpc.NewServer()
 	greeter.RegisterGreeterServer(svr)
 	svr.Serve(ln)
