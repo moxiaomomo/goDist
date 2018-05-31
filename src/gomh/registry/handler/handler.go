@@ -3,9 +3,10 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	raft "github.com/moxiaomomo/goRaft"
 	"gomh/util"
 	"net/http"
+
+	raft "github.com/moxiaomomo/goRaft"
 )
 
 func (s *service) AddHandler(w http.ResponseWriter, r *http.Request) {

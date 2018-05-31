@@ -4,11 +4,21 @@ import (
 	"time"
 )
 
-type FilterResp struct {
+const (
+	// FilteredPassed request can pass to server
+	FilteredPassed = 0
+	// FilteredFailed request cannot pass to server
+	FilteredFailed = 1
+)
+
+// Response filter response
+type Response struct {
+	Time    time.Time
 	Code    int
 	Message string
 }
 
+// Context filter context interface
 type Context interface {
 	StartAt() time.Time
 	EndAt() time.Time
@@ -17,27 +27,39 @@ type Context interface {
 	GetAttr(key string) interface{}
 }
 
+// Filter base filter interface
 type Filter interface {
 	Name() string
 	Init(config string) error
-	AsBegin(c Context) (FilterResp, error)
-	AsEnd(c Context) (FilterResp, error)
+	AsBegin(c Context) (Response, error)
+	AsEnd(c Context) (Response, error)
 }
 
+// DefaultFilter base filter
 type DefaultFilter struct{}
 
-func (f DefaultFilter) Name() string {
+// Name filter's name
+func (f *DefaultFilter) Name() string {
 	return "defaultfilter"
 }
 
-func (f DefaultFilter) Init() error {
+// Init filter initialization
+func (f *DefaultFilter) Init() error {
 	return nil
 }
 
-func (f DefaultFilter) AsBegin(c Context) (FilterResp, error) {
-	return FilterResp{}, nil
+// AsBegin execute at the beginning
+func (f *DefaultFilter) AsBegin(c Context) Response {
+	return Response{
+		Time: time.Now(),
+		Code: FilteredPassed,
+	}
 }
 
-func (f DefaultFilter) AsEnd(c Context) (FilterResp, error) {
-	return FilterResp{}, nil
+// AsEnd execute at the end
+func (f *DefaultFilter) AsEnd(c Context) Response {
+	return Response{
+		Time: time.Now(),
+		Code: FilteredPassed,
+	}
 }

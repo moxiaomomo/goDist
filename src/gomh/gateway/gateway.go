@@ -3,13 +3,15 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/tidwall/gjson"
-	"gomh/gateway/handler"
+	"gomh/gateway/proxy"
 	"gomh/util/logger"
 	"io/ioutil"
 	"os"
+
+	"github.com/tidwall/gjson"
 )
 
+// LoadConfig load proxy config
 func LoadConfig(confPath string) (map[string]interface{}, error) {
 	cfg, err := ioutil.ReadFile(confPath)
 	if err != nil {
@@ -31,6 +33,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	listenHost := fmt.Sprintf("%s:%s", cfg["listenhost"], cfg["listenport"])
-	handler.StartGatewayServer(listenHost)
+	_ = fmt.Sprintf("%s:%s", cfg["listenhost"], cfg["listenport"])
+	// handler.StartGatewayServer(listenHost)
+
+	proxy := proxy.NewProxy("")
+	proxy.Start()
 }

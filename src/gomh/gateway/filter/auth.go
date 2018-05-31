@@ -1,5 +1,4 @@
-package handler
-
+package filter
 
 type BaseAuth interface {
 	LimitReached() bool
@@ -14,4 +13,3 @@ type CookieAuth interface {
 	BaseAuth
 	IsCookieValid() bool
 }
-
