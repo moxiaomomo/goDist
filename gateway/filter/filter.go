@@ -18,15 +18,6 @@ type Response struct {
 	Message string
 }
 
-// Context filter context interface
-type Context interface {
-	StartAt() time.Time
-	EndAt() time.Time
-
-	SetAttr(key string, value interface{})
-	GetAttr(key string) interface{}
-}
-
 // Filter base filter interface
 type Filter interface {
 	Name() string

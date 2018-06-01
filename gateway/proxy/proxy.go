@@ -16,7 +16,6 @@ type Proxy struct {
 	cfg *config.ProxyConfig
 
 	filters   []filter.Filter
-	ctx       *context
 	isrunning bool
 	stopped   bool
 }
@@ -33,7 +32,6 @@ func NewProxy(confpath string) *Proxy {
 	proxy := &Proxy{
 		cfg:     cfg,
 		filters: []filter.Filter{},
-		ctx:     &context{},
 		stopped: false,
 	}
 	return proxy
@@ -46,10 +44,17 @@ func (p *Proxy) Start() {
 	}
 
 	// TODO: initialize filters using configuration
-	rl := &filter.RateLimitFilter{}
-	rl.Init("")
+	rlFilter := &filter.RateLimitFilter{}
+	rlFilter.Init("")
+	p.RegisterFilters([]filter.Filter{rlFilter})
 
-	p.RegisterFilters([]filter.Filter{rl})
+	tsFilter := &filter.TimeUsedFilter{}
+	tsFilter.Init("")
+	p.RegisterFilters([]filter.Filter{tsFilter})
+
+	headerFilter := &filter.HeaderFilter{}
+	headerFilter.Init("")
+	p.RegisterFilters([]filter.Filter{headerFilter})
 
 	h := &HandleReverse{
 		endpoint: p.cfg.LBHost,
@@ -68,26 +73,4 @@ func (p *Proxy) RegisterFilters(filters []filter.Filter) {
 	for _, f := range filters {
 		p.filters = append(p.filters, f)
 	}
-}
-
-// DoFilteringAsBegin return (resp, nil) if all filters passed, else (resp, err)
-func (p *Proxy) DoFilteringAsBegin() filter.Response {
-	for _, f := range p.filters {
-		resp := f.AsBegin(p.ctx)
-		if resp.Code != filter.FilteredPassed {
-			return resp
-		}
-	}
-	return filter.Response{Code: filter.FilteredPassed}
-}
-
-// DoFilteringAsEnd return (resp, nil) if all filters passed, else (resp, err)
-func (p *Proxy) DoFilteringAsEnd() filter.Response {
-	for _, f := range p.filters {
-		resp := f.AsEnd(p.ctx)
-		if resp.Code != filter.FilteredPassed {
-			return resp
-		}
-	}
-	return filter.Response{Code: filter.FilteredPassed}
 }

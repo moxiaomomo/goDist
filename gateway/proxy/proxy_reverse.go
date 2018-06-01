@@ -3,10 +3,10 @@ package proxy
 import (
 	"fmt"
 	"io/ioutil"
-	"math/rand"
+	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/moxiaomomo/goDist/gateway/filter"
 	"github.com/moxiaomomo/goDist/util"
@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	HTTPResp           = 0
+	HTTPRespOK         = 0
 	HTTPRespAuthFailed = -1
 	HTTPRespProcFailed = -2
 )
@@ -32,20 +32,10 @@ type HTTPResponse struct {
 	Data    interface{}
 }
 
-func NewMultipleHostsReverseProxy(targets []*url.URL) *httputil.ReverseProxy {
-	director := func(req *http.Request) {
-		target := targets[rand.Int()%len(targets)]
-		req.URL.Scheme = target.Scheme
-		req.URL.Host = target.Host
-		req.URL.Path = target.Path
-	}
-	return &httputil.ReverseProxy{Director: director}
-}
-
 func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	//	httpResp := &HTTPResponse{Code: HTTPResp}
+	ctx := filter.NewContext(r)
 
-	fresp := h.proxy.DoFilteringAsBegin()
+	fresp := h.DoFilteringAsBegin(ctx)
 	if fresp.Code != filter.FilteredPassed {
 		httpResp := &HTTPResponse{
 			Code:    HTTPRespAuthFailed,
@@ -57,7 +47,7 @@ func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.doServeHTTP(w, r)
 
-	fresp = h.proxy.DoFilteringAsEnd()
+	fresp = h.DoFilteringAsEnd(ctx)
 	if fresp.Code != filter.FilteredPassed {
 		httpResp := &HTTPResponse{
 			Code:    HTTPRespProcFailed,
@@ -66,8 +56,6 @@ func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		util.WriteHTTPResponseAsJson(w, httpResp)
 		return
 	}
-
-	//	util.WriteHTTPResponseAsJson(w, httpResp)
 }
 
 func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +80,41 @@ func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.LogInfof("to request apisrv: %s\n", apiURI.String())
-	rproxy := NewMultipleHostsReverseProxy([]*url.URL{apiURI})
+
+	// // use the non-default transport, use custom timeout
+	transport := &http.Transport{
+		Dial: func(netw, addr string) (net.Conn, error) {
+			deadline := time.Now().Add(5 * time.Second)
+			c, err := net.DialTimeout(netw, addr, time.Second*5)
+			if err != nil {
+				return nil, err
+			}
+			c.SetDeadline(deadline)
+			return c, nil
+		},
+	}
+	rproxy := util.NewMultipleHostsReverseProxy([]*url.URL{apiURI}, transport)
 	rproxy.ServeHTTP(w, r)
+}
+
+// DoFilteringAsBegin return (resp, nil) if all filters passed, else (resp, err)
+func (h *HandleReverse) DoFilteringAsBegin(ctx filter.Context) filter.Response {
+	for _, f := range h.proxy.filters {
+		resp := f.AsBegin(ctx)
+		if resp.Code != filter.FilteredPassed {
+			return resp
+		}
+	}
+	return filter.Response{Code: filter.FilteredPassed}
+}
+
+// DoFilteringAsEnd return (resp, nil) if all filters passed, else (resp, err)
+func (h *HandleReverse) DoFilteringAsEnd(ctx filter.Context) filter.Response {
+	for _, f := range h.proxy.filters {
+		resp := f.AsEnd(ctx)
+		if resp.Code != filter.FilteredPassed {
+			return resp
+		}
+	}
+	return filter.Response{Code: filter.FilteredPassed}
 }
