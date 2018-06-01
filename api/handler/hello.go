@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	pb "github.com/moxiaomomo/goDist/proto/greeter"
+	"github.com/moxiaomomo/goDist/util"
 	"github.com/moxiaomomo/goDist/util/logger"
 
 	"github.com/tidwall/gjson"
@@ -38,10 +39,20 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	r.ParseForm()
+	if _, ok := r.Form["name"]; !ok {
+		util.WriteHTTPResponseAsJson(w, map[string]string{"error": "invalid name"})
+		return
+	}
+	if _, ok := r.Form["message"]; !ok {
+		util.WriteHTTPResponseAsJson(w, map[string]string{"error": "invalid message"})
+		return
+	}
+
 	client := pb.NewGreeterClient(conn)
 	reqbody := pb.HelloRequest{
-		Name:    "xiaomo",
-		Message: "just4fun",
+		Name:    r.Form["name"][0],
+		Message: r.Form["message"][0],
 	}
 	resp, err := client.SayHello(context.Background(), &reqbody)
 	//	timer.OnEnd()

@@ -1,4 +1,4 @@
-package registry
+package main
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	_confPath = flag.String("_confpath", "raft.cfg", "configuration filepath")
+	confPath = flag.String("confpath", "raft.cfg", "configuration filepath")
 )
 
 func loadConfig(confPath string) (map[string]interface{}, error) {
@@ -30,7 +30,7 @@ func loadConfig(confPath string) (map[string]interface{}, error) {
 	return m, nil
 }
 
-func _main() {
+func main() {
 	flag.Parse()
 
 	//	cfg, err := loadConfig("config/reg.conf")
@@ -39,7 +39,7 @@ func _main() {
 	//		os.Exit(1)
 	//	}
 
-	sv, err := handler.NewService(*_confPath)
+	sv, err := handler.NewService(*confPath)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

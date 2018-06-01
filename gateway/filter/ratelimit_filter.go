@@ -13,7 +13,7 @@ type RateLimitFilter struct {
 }
 
 // Init filter initialization
-func (f *RateLimitFilter) Init() error {
+func (f *RateLimitFilter) Init(config string) error {
 	if f.globalRL == nil {
 		rl, err := tbucket.NewTokenBucket(1000, time.Second)
 		if err != nil {

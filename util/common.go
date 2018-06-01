@@ -1,7 +1,9 @@
 package util
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"reflect"
 )
 
@@ -54,5 +56,16 @@ func SetStructField(obj interface{}, name string, value interface{}) error {
 	}
 
 	structField.Set(val)
+	return nil
+}
+
+// WriteHTTPResponseAsJson write json-data to client
+func WriteHTTPResponseAsJson(w http.ResponseWriter, data interface{}) error {
+	d, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	w.Write(d)
 	return nil
 }

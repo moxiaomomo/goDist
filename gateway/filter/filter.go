@@ -31,8 +31,8 @@ type Context interface {
 type Filter interface {
 	Name() string
 	Init(config string) error
-	AsBegin(c Context) (Response, error)
-	AsEnd(c Context) (Response, error)
+	AsBegin(c Context) Response
+	AsEnd(c Context) Response
 }
 
 // DefaultFilter base filter

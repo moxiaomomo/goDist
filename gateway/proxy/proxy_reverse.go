@@ -8,13 +8,28 @@ import (
 	"net/http/httputil"
 	"net/url"
 
+	"github.com/moxiaomomo/goDist/gateway/filter"
+	"github.com/moxiaomomo/goDist/util"
 	"github.com/moxiaomomo/goDist/util/logger"
 
 	"github.com/tidwall/gjson"
 )
 
+const (
+	HTTPResp           = 0
+	HTTPRespAuthFailed = -1
+	HTTPRespProcFailed = -2
+)
+
 type HandleReverse struct {
 	endpoint string
+	proxy    *Proxy
+}
+
+type HTTPResponse struct {
+	Code    int
+	Message string
+	Data    interface{}
 }
 
 func NewMultipleHostsReverseProxy(targets []*url.URL) *httputil.ReverseProxy {
@@ -28,10 +43,38 @@ func NewMultipleHostsReverseProxy(targets []*url.URL) *httputil.ReverseProxy {
 }
 
 func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	//	httpResp := &HTTPResponse{Code: HTTPResp}
+
+	fresp := h.proxy.DoFilteringAsBegin()
+	if fresp.Code != filter.FilteredPassed {
+		httpResp := &HTTPResponse{
+			Code:    HTTPRespAuthFailed,
+			Message: fresp.Message,
+		}
+		util.WriteHTTPResponseAsJson(w, httpResp)
+		return
+	}
+
+	h.doServeHTTP(w, r)
+
+	fresp = h.proxy.DoFilteringAsEnd()
+	if fresp.Code != filter.FilteredPassed {
+		httpResp := &HTTPResponse{
+			Code:    HTTPRespProcFailed,
+			Message: fresp.Message,
+		}
+		util.WriteHTTPResponseAsJson(w, httpResp)
+		return
+	}
+
+	//	util.WriteHTTPResponseAsJson(w, httpResp)
+}
+
+func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) {
 	uri := fmt.Sprintf("http://%s/service/get?uripath=/api%s", h.endpoint, r.URL.Path)
 	cururl, _ := url.Parse(uri)
 
-	logger.LogInfof("lbget res: %s\n", cururl.String())
+	// logger.LogInfof("lbget res: %s\n", cururl.String())
 	workRes, err := http.Get(cururl.String())
 	if err != nil {
 		w.Write([]byte("out of service"))
@@ -40,7 +83,7 @@ func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	result, _ := ioutil.ReadAll(workRes.Body)
 	workRes.Body.Close()
 	svrHost := gjson.Get(string(result), "data").Get("host").String()
-	logger.LogInfof("togrpc:%+v %s\n", string(result), svrHost)
+	// logger.LogInfof("togrpc:%+v %s\n", string(result), svrHost)
 
 	apiURI, err := url.Parse(fmt.Sprintf("http://%s/api%s", svrHost, r.RequestURI))
 	if err != nil {

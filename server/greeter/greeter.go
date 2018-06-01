@@ -17,7 +17,7 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 	logger.LogInfo("SayHello Called.")
 	//	kkk += 20
 	//	time.Sleep(time.Duration(kkk) * time.Millisecond)
-	return &pb.HelloResponse{Message: "Hi " + in.Name}, nil
+	return &pb.HelloResponse{Message: "Hi " + in.Name + "\n"}, nil
 }
 
 func RegisterGreeterServer(gsvr *grpc.Server) {
