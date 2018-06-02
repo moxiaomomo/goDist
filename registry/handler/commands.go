@@ -1,8 +1,9 @@
 package handler
 
 import (
-	raft "github.com/moxiaomomo/goRaft"
 	"time"
+
+	raft "github.com/moxiaomomo/goRaft"
 )
 
 type ServiceCommand interface {
@@ -11,8 +12,9 @@ type ServiceCommand interface {
 }
 
 type DefaultServiceRegCommand struct {
-	UriPath string
-	Host    string
+	UriPath        string
+	Host           string
+	HealthCheckURL string
 }
 
 type DefaultServiceRmCommand struct {

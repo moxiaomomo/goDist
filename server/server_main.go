@@ -69,7 +69,11 @@ func main() {
 		os.Exit(-1)
 	}
 
-	err = sutil.Register("/srv/hello", cfg["lbhost"].(string), cfg["listenat"].(string))
+	// err = sutil.Register("/srv/hello", cfg["lbhost"].(string), cfg["listenat"].(string))
+	err = sutil.RegisterWithHealthCheck("/srv/hello",
+		cfg["lbhost"].(string),
+		cfg["listenat"].(string),
+		cfg["hcurl"].(string))
 	if err != nil {
 		logger.LogError(err)
 		os.Exit(-1)

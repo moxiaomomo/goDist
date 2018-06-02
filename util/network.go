@@ -44,3 +44,8 @@ func NewMultipleHostsReverseProxy(targets []*url.URL, transport *http.Transport)
 
 	return &httputil.ReverseProxy{Director: director}
 }
+
+// HealthcheckHandler for healthcheck
+func HealthcheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("OK"))
+}

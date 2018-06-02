@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/moxiaomomo/goDist/util"
+	"github.com/moxiaomomo/goDist/util/logger"
 
 	raft "github.com/moxiaomomo/goRaft"
 )
@@ -29,8 +30,9 @@ func (s *service) AddHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		host := r.Form["host"][0]
 		uripath := r.Form["uripath"][0]
+		hcurl := r.Form["hcurl"][0]
 
-		err := s.Add(uripath, host)
+		err := s.Add(uripath, host, hcurl)
 		if err != nil {
 			regResp.Code = util.REG_WORKER_FAILED
 			regResp.Message = err.Error()
@@ -93,9 +95,8 @@ func (s *service) GetServerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func RegistryHandler(s *service) {
-	//	logger.SetLogLevel(util.LOG_INFO)
+	logger.SetLogLevel(util.LOG_INFO)
 
-	//	go RemoveWorkerAsTimeout()
 	SetLBPolicy(util.LB_FASTRESP)
 
 	s.raftsrv.RegisterHandler("/service/add", s.AddHandler)

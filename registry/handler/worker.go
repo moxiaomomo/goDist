@@ -19,21 +19,23 @@ var (
 )
 
 type Worker struct {
-	Heartbeat int64  // last heartbeat timestamp
-	UriPath   string // api request uripath
-	Host      string
-	callCount int
-	respMS    int // average response time in microsecond
+	HealthCheckURL string // api for healthcheck
+	Heartbeat      int64  // last heartbeat timestamp
+	UriPath        string // api request uripath
+	Host           string
+	callCount      int
+	respMS         int // average response time in microsecond
 	sync.Mutex
 }
 
 type Workers struct {
-	Members     map[string][]Worker
-	lastRRIndex int
+	Members             map[string][]Worker
+	lastRRIndex         int
+	healthcheckInterval time.Duration
 	sync.Mutex
 }
 
-var workers Workers = NewWorkers()
+var workers *Workers = NewWorkers()
 
 type Comparable interface {
 	IsEqual(a interface{}) bool
@@ -45,11 +47,14 @@ func NewWorker() *Worker {
 	}
 }
 
-func NewWorkers() Workers {
-	return Workers{
-		lastRRIndex: 0,
-		Members:     make(map[string][]Worker, 0),
+func NewWorkers() *Workers {
+	works := &Workers{
+		lastRRIndex:         0,
+		healthcheckInterval: time.Second,
+		Members:             make(map[string][]Worker, 0),
 	}
+	// works.AsyncHealthCheck()
+	return works
 }
 
 func SetLBPolicy(p util.LBPolicyEnum) {

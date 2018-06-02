@@ -2,8 +2,9 @@ package handler
 
 import (
 	"encoding/json"
-	raft "github.com/moxiaomomo/goRaft"
 	"sync"
+
+	raft "github.com/moxiaomomo/goRaft"
 )
 
 type service struct {
@@ -16,7 +17,7 @@ type Service interface {
 	Remove(string, string) error
 }
 
-func (s *service) Add(uripath string, host string) error {
+func (s *service) Add(uripath string, host string, hcurl string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -24,8 +25,9 @@ func (s *service) Add(uripath string, host string) error {
 		return nil
 	}
 	cmd := &DefaultServiceRegCommand{
-		UriPath: uripath,
-		Host:    host,
+		UriPath:        uripath,
+		Host:           host,
+		HealthCheckURL: hcurl,
 	}
 	cmdjson, _ := json.Marshal(cmd)
 	s.raftsrv.OnAppendEntry(cmd, []byte(cmdjson))
@@ -68,5 +70,6 @@ func NewService(confPath string) (*service, error) {
 	// register commands
 	sv.raftsrv.RegisterCommand(&DefaultServiceRegCommand{})
 	sv.raftsrv.RegisterCommand(&DefaultServiceRmCommand{})
+
 	return sv, nil
 }

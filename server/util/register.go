@@ -13,24 +13,31 @@ import (
 
 var regClient = &http.Client{Timeout: 10 * time.Second}
 
+func RegisterWithHealthCheck(uripath string, lbhost string, svrHost string, hcurl string) error {
+	return doRegister(uripath, lbhost, svrHost, hcurl)
+}
+
 func Register(uripath string, lbhost string, svrHost string) error {
 	go func() {
 		for {
 			time.Sleep(time.Second * util.HEARTBEAT_INTERVAL)
-			err := reportHeartbeat(uripath, lbhost, svrHost)
+			err := doRegister(uripath, lbhost, svrHost, "")
 			if err != nil {
 				logger.LogErrorf("Send heartbeat failed: %s\n", err.Error())
 			}
 
 		}
 	}()
-	return reportHeartbeat(uripath, lbhost, svrHost)
+	return doRegister(uripath, lbhost, svrHost, "")
 }
 
-func reportHeartbeat(uripath string, lbhost string, svrHost string) error {
+func doRegister(uripath string, lbhost string, svrHost string, hcurl string) error {
 	data := make(url.Values)
 	data["host"] = []string{svrHost}
 	data["uripath"] = []string{uripath}
+	if hcurl != "" {
+		data["hcurl"] = []string{hcurl}
+	}
 
 	url := fmt.Sprintf("http://%s/service/add?host=%s&uripath=%s", lbhost, svrHost, uripath)
 	resp, err := regClient.PostForm(url, data)
