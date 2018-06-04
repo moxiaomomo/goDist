@@ -67,6 +67,9 @@ func NewService(confPath string) (*service, error) {
 	}
 	// register handlers
 	RegistryHandler(sv)
+	// remove workers as heartbeat lost
+	go RemoveWorkerAsTimeout()
+
 	// register commands
 	sv.raftsrv.RegisterCommand(&DefaultServiceRegCommand{})
 	sv.raftsrv.RegisterCommand(&DefaultServiceRmCommand{})

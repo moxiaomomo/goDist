@@ -1,11 +1,14 @@
 package util
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 )
 
 func GetLocalIP() string {
@@ -48,4 +51,31 @@ func NewMultipleHostsReverseProxy(targets []*url.URL, transport *http.Transport)
 // HealthcheckHandler for healthcheck
 func HealthcheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
+}
+
+//HeartbeatForRegistry HeartbeatForRegistry
+func HeartbeatForRegistry(lbHost, svrHost, hcURL string, uriPath []string) error {
+	data := make(url.Values)
+	data["host"] = []string{svrHost}
+	data["uripath"] = uriPath
+	data["hcurl"] = []string{hcURL}
+
+	url := fmt.Sprintf("http://%s/service/add", lbHost)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.PostForm(url, data)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var regResp CommonResp
+	err = json.NewDecoder(resp.Body).Decode(&regResp)
+
+	if err != nil {
+		return err
+	}
+	if regResp.Code != REG_WORKER_OK {
+		return fmt.Errorf("Error: %s", regResp.Message)
+	}
+	return nil
 }

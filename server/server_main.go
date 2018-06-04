@@ -69,17 +69,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	// err = sutil.Register("/srv/hello", cfg["lbhost"].(string), cfg["listenat"].(string))
-	err = sutil.RegisterWithHealthCheck("/srv/hello",
-		cfg["lbhost"].(string),
-		cfg["listenat"].(string),
-		cfg["hcurl"].(string))
-	if err != nil {
-		logger.LogError(err)
-		os.Exit(-1)
-	} else {
-		logger.LogInfo("Register worker succeeded.")
-	}
+	go sutil.RegisterWithHeartbeat("/srv/hello", cfg["lbhost"].(string), cfg["listenat"].(string))
 
 	logger.LogInfof("to run server on addr: %s\n", cfg["listenat"].(string))
 	svr := grpc.NewServer()

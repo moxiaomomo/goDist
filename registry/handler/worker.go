@@ -140,30 +140,31 @@ func RemoveWorker(w Worker) error {
 	return ERR_WORKER_NOT_EXISTS
 }
 
+// RemoveWorkerAsTimeout remove those workers lost heartbeat
 func RemoveWorkerAsTimeout() {
-	for {
+	t := time.NewTicker(workers.healthcheckInterval)
+	for range t.C {
 		func() {
 			workers.Mutex.Lock()
 			defer workers.Mutex.Unlock()
 
 			now := time.Now().Unix()
-			for k1, v1 := range workers.Members {
-				for k, v := range v1 {
-					//fmt.Printf("%+v\n", v1)
-					// timeout after twice heartbeat interval
-					if now-v.Heartbeat > util.HEARTBEAT_INTERVAL*2 {
-						if k == len(workers.Members[k1])-1 {
-							workers.Members[k1] = workers.Members[k1][:k]
+			for k := range workers.Members {
+				for idx := range workers.Members[k] {
+					if now-workers.Members[k][idx].Heartbeat > util.HEARTBEAT_INTERVAL*2 {
+						logger.LogWarnf("Lost heartbeat from worker: %s\n",
+							workers.Members[k][idx].Host)
+
+						if idx == len(workers.Members[k])-1 {
+							workers.Members[k] = workers.Members[k][:idx]
 						} else {
-							workers.Members[k1] = append(workers.Members[k1][:k], workers.Members[k1][k+1:]...)
+							workers.Members[k] = append(workers.Members[k][:idx],
+								workers.Members[k][idx+1:]...)
 						}
-						logger.LogWarnf("Lost heartbeat from worker: %s\n", v.Host)
 					}
 				}
 			}
 		}()
-
-		time.Sleep(time.Second)
 	}
 }
 

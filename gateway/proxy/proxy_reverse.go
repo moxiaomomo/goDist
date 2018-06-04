@@ -72,6 +72,11 @@ func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) {
 	workRes.Body.Close()
 	svrHost := gjson.Get(string(result), "data").Get("host").String()
 	// logger.LogInfof("togrpc:%+v %s\n", string(result), svrHost)
+	if svrHost == "" {
+		w.WriteHeader(502)
+		w.Write([]byte("out of service\n"))
+		return
+	}
 
 	apiURI, err := url.Parse(fmt.Sprintf("http://%s/api%s", svrHost, r.RequestURI))
 	if err != nil {

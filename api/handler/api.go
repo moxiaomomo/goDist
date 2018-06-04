@@ -1,10 +1,7 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
-	"net/url"
-	"os"
 	"time"
 
 	"github.com/moxiaomomo/goDist/util"
@@ -18,30 +15,33 @@ func HealthcheckHandler(w http.ResponseWriter, r *http.Request) {
 func InitHandlers() {
 	http.HandleFunc("/healthcheck", util.HealthcheckHandler)
 	http.HandleFunc("/api/hello", HelloHandler)
+}
 
+func RegisterWithHeartbeat() {
 	// TODO: to register api server
 	lbhost := "127.0.0.1:4000"
 	svrHost := "127.0.0.1:6000"
 	uripath := "/api/hello"
 	hcurl := "http://127.0.0.1:6000/healthcheck"
 
-	data := make(url.Values)
-	data["host"] = []string{svrHost}
-	data["uripath"] = []string{uripath}
-	data["hcurl"] = []string{hcurl}
-
-	url := fmt.Sprintf("http://%s/service/add", lbhost)
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.PostForm(url, data)
+	err := util.HeartbeatForRegistry(lbhost, svrHost, hcurl, []string{uripath})
 	if err != nil {
-		logger.LogErrorf("register api server failed, err:%s", err)
-		os.Exit(1)
+		logger.LogErrorf("failed to register server, err:%s\n", err)
 	}
-	defer resp.Body.Close()
+
+	t := time.NewTicker(time.Second * util.HEARTBEAT_INTERVAL)
+	for range t.C {
+		err := util.HeartbeatForRegistry(lbhost, svrHost, hcurl, []string{uripath})
+		if err != nil {
+			logger.LogErrorf("failed to register server, err:%s\n", err)
+		}
+	}
 }
 
 func StartAPIServer(listenHost string) {
 	InitHandlers()
+
+	go RegisterWithHeartbeat()
 
 	logger.LogInfof("to start server on port: %s\n", listenHost)
 	http.ListenAndServe(listenHost, nil)
