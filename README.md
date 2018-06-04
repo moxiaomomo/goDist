@@ -1,6 +1,6 @@
 # goDist
 
-goDist is a kind of microservice framework implemented by Go (is under development).
+goDist is a kind of microservice development tool implemented by Go (is under development).
 
 - gateway 
 
@@ -21,3 +21,6 @@ a kind service for service discovery.
 - loadbalance
 
 not yet openup.
+
+*To impletement an architecture like this:*
+![microservice](./microservice.png)
