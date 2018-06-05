@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"time"
 
+	"github.com/moxiaomomo/goDist/api/config"
 	"github.com/moxiaomomo/goDist/util"
 	"github.com/moxiaomomo/goDist/util/logger"
 )
@@ -17,31 +20,38 @@ func InitHandlers() {
 	http.HandleFunc("/api/hello", HelloHandler)
 }
 
-func RegisterWithHeartbeat() {
-	// TODO: to register api server
-	lbhost := "127.0.0.1:4000"
-	svrHost := "127.0.0.1:6000"
-	uripath := "/api/hello"
-	hcurl := "http://127.0.0.1:6000/healthcheck"
+func RegisterWithHeartbeat(confPath string) {
+	b, err := ioutil.ReadFile(confPath)
+	if err != nil {
+		logger.LogErrorf("failed to open configuration file\n")
+		return
+	}
 
-	err := util.HeartbeatForRegistry(lbhost, svrHost, hcurl, []string{uripath})
+	conf := &config.APIConfig{}
+	if err = json.Unmarshal(b, conf); err != nil {
+		logger.LogErrorf("failed to load configuration\n")
+		return
+	}
+
+	err = util.HeartbeatForRegistry(conf.LBHost, conf.SvrAddr, conf.HCURL, conf.URIPath)
 	if err != nil {
 		logger.LogErrorf("failed to register server, err:%s\n", err)
 	}
 
 	t := time.NewTicker(time.Second * util.HEARTBEAT_INTERVAL)
 	for range t.C {
-		err := util.HeartbeatForRegistry(lbhost, svrHost, hcurl, []string{uripath})
+		err := util.HeartbeatForRegistry(conf.LBHost, conf.SvrAddr, conf.HCURL, conf.URIPath)
 		if err != nil {
 			logger.LogErrorf("failed to register server, err:%s\n", err)
 		}
 	}
 }
 
+// StartAPIServer StartAPIServer
 func StartAPIServer(listenHost string) {
 	InitHandlers()
 
-	go RegisterWithHeartbeat()
+	go RegisterWithHeartbeat("./config/api.conf")
 
 	logger.LogInfof("to start server on port: %s\n", listenHost)
 	http.ListenAndServe(listenHost, nil)
