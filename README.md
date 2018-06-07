@@ -26,5 +26,5 @@ not yet openup.
 
 a kind of distributed service to trace rpc-call chain (using opentracing and jaeger)
 
-*To impletement an architecture like this:*
+**An architecture of this microservice is supposed to be like this:**
 ![microservice](./microservice.png)
