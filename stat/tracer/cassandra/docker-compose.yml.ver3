@@ -1,0 +1,40 @@
+version: '3'
+services:
+ 
+###############################
+ cassandra0:
+  image: cassandra
+  container_name: cassandra0
+  ports:
+   - 9042:9042
+   - 9160:9160
+   - 7199:7199
+   - 8778:8778
+  environment:
+   - CASSANDRA_START_RPC=true
+  environment:
+   - CASSANDRA_SEEDS=cassandra0
+   - CASSANDRA_CLUSTER_NAME=mtech_cluster
+  ulimits:
+    memlock: -1
+    nproc: 32768
+    nofile: 100000
+  mem_limit: 1024M
+ 
+###############################
+ cassandra1:
+  image: cassandra
+  container_name: cassandra1
+  ports:
+   - 9142:9042
+  command: bash -c 'sleep 60;  /docker-entrypoint.sh cassandra -f'
+  depends_on:
+   - cassandra0
+  environment:
+   - CASSANDRA_SEEDS=cassandra0
+   - CASSANDRA_CLUSTER_NAME=mtech_cluster
+  ulimits:
+    memlock: -1
+    nproc: 32768
+    nofile: 100000
+  mem_limit: 1024M

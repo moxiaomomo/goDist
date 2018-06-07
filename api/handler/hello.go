@@ -31,7 +31,7 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 
 	//	timer := ProcTimer{}
 	//	timer.OnStart()
-	conn, err := grpc.Dial(svrHost, grpc.WithInsecure())
+	conn, err := grpc.Dial(svrHost, dailOpts...)
 	if err != nil {
 		logger.LogError("grpc call failed.")
 		w.Write([]byte("internel server error."))

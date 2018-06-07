@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
-	"io/ioutil"
 	"net"
 	"os"
 	"time"
@@ -30,19 +28,7 @@ func RegisterWithHeartbeat(conf *config.ServerConfig) {
 }
 
 // StartServer StartServer
-func StartServer() {
-	b, err := ioutil.ReadFile("./config/server.conf")
-	if err != nil {
-		logger.LogErrorf("failed to open configuration file\n")
-		return
-	}
-
-	conf := &config.ServerConfig{}
-	if err = json.Unmarshal(b, conf); err != nil {
-		logger.LogErrorf("failed to load configuration\n")
-		return
-	}
-
+func StartServer(conf *config.ServerConfig, grpcOpt []grpc.ServerOption) {
 	go RegisterWithHeartbeat(conf)
 
 	logger.LogInfof("to run server on addr: %s\n", conf.SvrAddr)
@@ -52,7 +38,7 @@ func StartServer() {
 		logger.LogError(err.Error())
 		os.Exit(-1)
 	}
-	svr := grpc.NewServer()
+	svr := grpc.NewServer(grpcOpt...)
 	greeter.RegisterGreeterServer(svr)
 	svr.Serve(ln)
 }
