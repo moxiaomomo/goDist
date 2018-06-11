@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -14,11 +15,12 @@ import (
 	"google.golang.org/grpc"
 )
 
+// HelloHandler rpc-client
 func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	logger.LogDebug("To call SayHello.")
 
-	// TODO: read config from configfile
-	url, _ := url.Parse("http://127.0.0.1:4000/service/get?uripath=/srv/hello")
+	requrl := fmt.Sprintf("http://%s/service/get?uripath=/srv/hello", apiConf.LBHost)
+	url, _ := url.Parse(requrl)
 	workRes, err := http.Get(url.String())
 	if err != nil {
 		w.Write([]byte("out of service."))
@@ -29,8 +31,6 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 	svrHost := gjson.Get(string(result), "data").Get("host").String()
 	logger.LogInfof("togrpc:%+v %s\n", string(result), svrHost)
 
-	//	timer := ProcTimer{}
-	//	timer.OnStart()
 	conn, err := grpc.Dial(svrHost, dailOpts...)
 	if err != nil {
 		logger.LogError("grpc call failed.")
@@ -55,7 +55,7 @@ func HelloHandler(w http.ResponseWriter, r *http.Request) {
 		Message: r.Form["message"][0],
 	}
 	resp, err := client.SayHello(context.Background(), &reqbody)
-	//	timer.OnEnd()
+
 	if err != nil {
 		logger.LogError("call sayhello failed.")
 		w.Write([]byte("internel server error."))

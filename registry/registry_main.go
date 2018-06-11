@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	confPath = flag.String("confpath", "raft.cfg", "configuration filepath")
+	confPath = flag.String("confpath", "", "absolute configuration filepath")
 )
 
 func loadConfig(confPath string) (map[string]interface{}, error) {
@@ -32,12 +32,6 @@ func loadConfig(confPath string) (map[string]interface{}, error) {
 
 func main() {
 	flag.Parse()
-
-	//	cfg, err := loadConfig("config/reg.conf")
-	//	if err != nil {
-	//		logger.LogErrorf("Program will exit while loading config failed.")
-	//		os.Exit(1)
-	//	}
 
 	sv, err := handler.NewService(*confPath)
 	if err != nil {

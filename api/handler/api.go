@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+var apiConf *config.APIConfig
 var dailOpts []grpc.DialOption
 
 func HealthcheckHandler(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +39,7 @@ func RegisterWithHeartbeat(conf *config.APIConfig) {
 
 // StartAPIServer StartAPIServer
 func StartAPIServer(conf *config.APIConfig, dialOpt []grpc.DialOption) {
+	apiConf = conf
 	dailOpts = dialOpt
 
 	InitHandlers()
