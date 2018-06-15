@@ -3,6 +3,7 @@ package util
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -68,10 +69,16 @@ func HeartbeatForRegistry(lbHost, svrHost, hcURL string, uriPath []string) error
 	}
 	defer resp.Body.Close()
 
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
 	var regResp CommonResp
-	err = json.NewDecoder(resp.Body).Decode(&regResp)
+	err = json.Unmarshal(body, &regResp)
 
 	if err != nil {
+
 		return err
 	}
 	if regResp.Code != REG_WORKER_OK {

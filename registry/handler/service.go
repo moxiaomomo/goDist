@@ -66,7 +66,7 @@ func NewService(confPath string) (*service, error) {
 		raftsrv: raftsvr,
 	}
 	// register handlers
-	RegistryHandler(sv)
+	RegisterHandler(sv)
 	// remove workers as heartbeat lost
 	go RemoveWorkerAsTimeout()
 

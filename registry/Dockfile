@@ -1,0 +1,25 @@
+# Version 0.1
+
+# 基础镜像
+FROM ubuntu:16.04
+
+# 维护者信息
+MAINTAINER moguang
+
+# 镜像操作命令
+RUN apt-get -y update
+RUN apt-get -y install git
+RUN mkdir -p /www/web/ 
+
+COPY ./regsvr /www/web/
+
+RUN chmod 777 /www/web/regsvr
+
+ENV PARAMS=""
+
+CMD /www/web/regsvr $PARAMS
+
+# docker network create --subnet=172.19.0.0/16 shadownet
+# docker run -d -p 3000:3000 -p 4000:4000 -e PARAMS="-bexpect=2 -name=node1 -host=172.19.0.2:3000 -client=172.19.0.2:4000" --net shadownet --ip 172.19.0.2 --name regsvr1 moxiaomomo:regsvr1.1
+# docker run -d -p 3001:3000 -p 4001:4000 -e PARAMS="-name=node2 -host=172.19.0.3:3000 -client=172.19.0.3:4000 -join=172.19.0.2:3000" --net shadownet --ip 172.19.0.3 --name regsvr2 moxiaomomo:regsvr1.1
+# docker run -d -p 3002:3000 -p 4002:4000 -e PARAMS="-name=node3 -host=172.19.0.4:3000 -client=172.19.0.4:4000 -join=172.19.0.2:3000" --net shadownet --ip 172.19.0.4 --name regsvr3 moxiaomomo:regsvr1.1

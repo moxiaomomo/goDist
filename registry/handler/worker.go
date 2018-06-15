@@ -179,6 +179,21 @@ func GetWorker(uripath string) (*Worker, error) {
 	}
 }
 
+// ListWorkers ListWorkers
+func ListWorkers() map[string][]string {
+	workers.Mutex.Lock()
+	defer workers.Mutex.Unlock()
+
+	val := map[string][]string{}
+	for k := range workers.Members {
+		val[k] = []string{}
+		for idx := range workers.Members[k] {
+			val[k] = append(val[k], workers.Members[k][idx].Host)
+		}
+	}
+	return val
+}
+
 func RandomWorker(uripath string) (*Worker, error) {
 	workers.Mutex.Lock()
 	defer workers.Mutex.Unlock()

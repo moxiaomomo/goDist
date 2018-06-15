@@ -12,26 +12,32 @@ import (
 )
 
 func (s *service) AddHandler(w http.ResponseWriter, r *http.Request) {
-	if s.raftsrv.State() != raft.Leader {
-		url := fmt.Sprintf("http://%s%s", s.raftsrv.CurLeaderExHost(), r.RequestURI)
-		http.Redirect(w, r, url, http.StatusFound)
-		return
-	}
-
 	regResp := util.CommonResp{
 		Code:    util.REG_WORKER_OK,
 		Message: "ok",
 	}
 
-	r.ParseForm()
-	if host, ok := r.Form["host"]; !ok || len(host) <= 0 {
-		regResp.Code = util.REG_WORKER_FAILED
-		regResp.Message = "invalid request"
-	} else {
-		host := r.Form["host"][0]
-		uripath := r.Form["uripath"][0]
-		hcurl := r.Form["hcurl"][0]
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
 
+	if s.raftsrv.State() != raft.Leader {
+		url := fmt.Sprintf("http://%s%s", s.raftsrv.CurLeaderExHost(), r.RequestURI)
+		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+		return
+	}
+
+	var (
+		host    = r.PostFormValue("host")
+		uripath = r.PostFormValue("uripath")
+	)
+
+	if host == "" || uripath == "" {
+		regResp.Code = util.REG_WORKER_FAILED
+		regResp.Message = "invalid host or uripath"
+	} else {
+		hcurl := r.PostFormValue("hcurl")
 		err := s.Add(uripath, host, hcurl)
 		if err != nil {
 			regResp.Code = util.REG_WORKER_FAILED
@@ -48,26 +54,34 @@ func (s *service) AddHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) RemoveHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
 	if s.raftsrv.State() != raft.Leader {
 		url := fmt.Sprintf("http://%s%s", s.raftsrv.CurLeaderExHost(), r.RequestURI)
 		http.Redirect(w, r, url, http.StatusFound)
 		return
 	}
 
-	r.ParseForm()
-	if host, ok := r.Form["host"]; !ok || len(host) <= 0 {
-		w.Write([]byte("invalid request."))
-		return
-	}
-	host := r.Form["host"][0]
-	uripath := r.Form["uripath"][0]
-
-	_ = s.Remove(uripath, host)
-
 	regResp := util.CommonResp{
 		Code:    util.REG_WORKER_OK,
 		Message: "ok",
 	}
+
+	var (
+		host    = r.PostFormValue("host")
+		uripath = r.PostFormValue("uripath")
+	)
+
+	if host == "" || uripath == "" {
+		regResp.Code = util.REG_WORKER_FAILED
+		regResp.Message = "invalid host or uripath"
+	} else {
+		_ = s.Remove(uripath, host)
+	}
+
 	respBody, err := json.Marshal(regResp)
 	if err != nil {
 		w.Write([]byte("internel server error."))
@@ -94,7 +108,14 @@ func (s *service) GetServerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func RegistryHandler(s *service) {
+func (s *service) ListServerHandler(w http.ResponseWriter, r *http.Request) {
+	workers := ListWorkers()
+	b, _ := json.Marshal(workers)
+	w.Write([]byte(b))
+}
+
+// RegisterHandler Register handlers
+func RegisterHandler(s *service) {
 	logger.SetLogLevel(util.LOG_INFO)
 
 	SetLBPolicy(util.LB_FASTRESP)
@@ -102,4 +123,5 @@ func RegistryHandler(s *service) {
 	s.raftsrv.RegisterHandler("/service/add", s.AddHandler)
 	s.raftsrv.RegisterHandler("/service/remove", s.RemoveHandler)
 	s.raftsrv.RegisterHandler("/service/get", s.GetServerHandler)
+	s.raftsrv.RegisterHandler("/service/list", s.ListServerHandler)
 }
