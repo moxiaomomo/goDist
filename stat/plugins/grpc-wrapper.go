@@ -97,9 +97,9 @@ func ClientInterceptor(tracer opentracing.Tracer) grpc.UnaryClientInterceptor {
 }
 
 func ServerInterceptor(tracer opentracing.Tracer) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
+	return func(ctx context.Context, 
+		req interface{}, 
+		info *grpc.UnaryServerInfo, 
 		handler grpc.UnaryHandler) (resp interface{}, err error) {
 
 		md, ok := metadata.FromIncomingContext(ctx)
