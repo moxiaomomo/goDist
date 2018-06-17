@@ -10,7 +10,7 @@ from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.query import SimpleStatement
 
-KEYSPACE = "mykeyspace"
+KEYSPACE = "jaeger_v1_dc1"
 
 def insertData(number):
     cluster = Cluster(contact_points=['127.0.0.1'],port=9042)

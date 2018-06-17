@@ -6,8 +6,9 @@ import (
 
 	"github.com/moxiaomomo/goDist/api/config"
 	"github.com/moxiaomomo/goDist/api/handler"
-	"github.com/moxiaomomo/goDist/stat/plugins"
 	"github.com/moxiaomomo/goDist/util/logger"
+	gtrace "github.com/moxiaomomo/grpc-jaeger"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 )
@@ -26,12 +27,12 @@ func main() {
 	}
 
 	dialOpts := []grpc.DialOption{grpc.WithInsecure()}
-	tracer, _, err := plugins.NewJaegerTracer(conf.ServiceName, "127.0.0.1:6831")
+	tracer, _, err := gtrace.NewJaegerTracer(conf.ServiceName, "127.0.0.1:6831")
 	if err != nil {
 		grpclog.Errorf("new tracer err %v , continue", err)
 	}
 	if tracer != nil {
-		dialOpts = append(dialOpts, plugins.DialOption(tracer))
+		dialOpts = append(dialOpts, gtrace.DialOption(tracer))
 	}
 
 	handler.StartAPIServer(conf, dialOpts)

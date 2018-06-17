@@ -7,10 +7,10 @@ import (
 	"github.com/moxiaomomo/goDist/server/config"
 	"github.com/moxiaomomo/goDist/server/handler"
 	"github.com/moxiaomomo/goDist/util/logger"
+	gtrace "github.com/moxiaomomo/grpc-jaeger"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
-
-	"github.com/moxiaomomo/goDist/stat/plugins"
 )
 
 func main() {
@@ -27,12 +27,12 @@ func main() {
 	}
 
 	var servOpts []grpc.ServerOption
-	tracer, _, err := plugins.NewJaegerTracer(conf.ServiceName, "127.0.0.1:6831")
+	tracer, _, err := gtrace.NewJaegerTracer(conf.ServiceName, "127.0.0.1:6831")
 	if err != nil {
 		grpclog.Errorf("new tracer err %v , continue", err)
 	}
 	if tracer != nil {
-		servOpts = append(servOpts, plugins.ServerOption(tracer))
+		servOpts = append(servOpts, gtrace.ServerOption(tracer))
 	}
 
 	handler.StartServer(conf, servOpts)
