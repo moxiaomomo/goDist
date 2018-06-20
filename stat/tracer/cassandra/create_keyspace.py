@@ -10,7 +10,7 @@ from cassandra import ConsistencyLevel
 from cassandra.cluster import Cluster
 from cassandra.query import SimpleStatement
 
-KEYSPACE = "mykeyspace"
+KEYSPACE = "jaeger_v1_dc1"
 
 def createKeySpace():
     cluster = Cluster(contact_points=['127.0.0.1'],port=9042)
@@ -18,12 +18,12 @@ def createKeySpace():
 
     log.info("Creating keyspace...")
     try:
-        session.execute("""
-            CREATE KEYSPACE %s
-            WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': '2' }
-            """ % KEYSPACE)
-
-        log.info("setting keyspace...")
+#        session.execute("""
+#            CREATE KEYSPACE %s
+#            WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': '2' }
+#            """ % KEYSPACE)
+#
+#        log.info("setting keyspace...")
         session.set_keyspace(KEYSPACE)
 
         log.info("creating table...")
