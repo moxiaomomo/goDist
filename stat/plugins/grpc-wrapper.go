@@ -97,9 +97,9 @@ func ClientInterceptor(tracer opentracing.Tracer) grpc.UnaryClientInterceptor {
 }
 
 func ServerInterceptor(tracer opentracing.Tracer) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
+	return func(ctx context.Context, 
+		req interface{}, 
+		info *grpc.UnaryServerInfo, 
 		handler grpc.UnaryHandler) (resp interface{}, err error) {
 
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -109,8 +109,7 @@ func ServerInterceptor(tracer opentracing.Tracer) grpc.UnaryServerInterceptor {
 
 		spanContext, err := tracer.Extract(opentracing.TextMap, MDReaderWriter{md})
 		if err != nil && err != opentracing.ErrSpanContextNotFound {
-			grpclog.Errorf("extract from metadata err %v", err)
-			// span.LogFields(log.String("extract-error", err.Error()))
+			grpclog.Errorf("extract from metadata err: %v", err)
 		}
 
 		serverSpan := tracer.StartSpan(
