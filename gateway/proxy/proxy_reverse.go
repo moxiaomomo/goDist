@@ -21,15 +21,37 @@ const (
 	HTTPRespProcFailed = -2
 )
 
+// HandleReverse HandleReverse
 type HandleReverse struct {
 	endpoint string
 	proxy    *Proxy
 }
 
+//HTTPResponse HTTPResponse
 type HTTPResponse struct {
 	Code    int
 	Message string
 	Data    interface{}
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+	length int
+}
+
+func (w *statusWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusWriter) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.status = 200
+	}
+	n, err := w.ResponseWriter.Write(b)
+	w.length += n
+	return n, err
 }
 
 func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -100,9 +122,14 @@ func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) bool
 		},
 	}
 	rproxy := util.NewMultipleHostsReverseProxy([]*url.URL{apiURI}, transport)
-	rproxy.ServeHTTP(w, r)
+
+	sw := statusWriter{ResponseWriter: w}
+	rproxy.ServeHTTP(&sw, r)
 	// TODO: judge the response code, then return true or false
-	return true
+	if sw.status < 400 {
+		return true
+	}
+	return false
 }
 
 // DoFilteringAsBegin return (resp, nil) if all filters passed, else (resp, err)
