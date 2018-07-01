@@ -26,5 +26,9 @@ not yet openup.
 
 a kind of distributed service to trace rpc-call chain (using opentracing and jaeger)
 
+- database proxy
+
+a proxy to manage db connection pools.
+
 **An architecture of this microservice is supposed to be like this:**
 ![microservice](./microservice.png)
