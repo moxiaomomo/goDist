@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -17,12 +18,18 @@ type Context interface {
 }
 
 type context struct {
-	req *http.Request
+	attrs map[string]interface{}
+	req   *http.Request
 }
 
 // NewContext NewContext
 func NewContext(req *http.Request) Context {
-	return &context{req: req}
+	ctx := &context{
+		req:   req,
+		attrs: make(map[string]interface{}),
+	}
+	ctx.attrs["remoteURL"] = fmt.Sprintf("%s%s", req.Host, req.RequestURI)
+	return ctx
 }
 
 func (c *context) HTTPRequest() *http.Request {
@@ -42,5 +49,8 @@ func (c *context) SetAttr(key string, value interface{}) {
 }
 
 func (c *context) GetAttr(key string) interface{} {
+	if val, ok := c.attrs[key]; ok {
+		return val
+	}
 	return nil
 }

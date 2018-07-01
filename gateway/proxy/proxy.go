@@ -48,6 +48,10 @@ func (p *Proxy) Start() {
 	rlFilter.Init("")
 	p.RegisterFilters([]filter.Filter{rlFilter})
 
+	cbFilter := &filter.CircuitBreakerFilter{}
+	rlFilter.Init("")
+	p.RegisterFilters([]filter.Filter{cbFilter})
+
 	tsFilter := &filter.TimeUsedFilter{}
 	tsFilter.Init("")
 	p.RegisterFilters([]filter.Filter{tsFilter})

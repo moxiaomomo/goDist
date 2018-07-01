@@ -21,15 +21,37 @@ const (
 	HTTPRespProcFailed = -2
 )
 
+// HandleReverse HandleReverse
 type HandleReverse struct {
 	endpoint string
 	proxy    *Proxy
 }
 
+//HTTPResponse HTTPResponse
 type HTTPResponse struct {
 	Code    int
 	Message string
 	Data    interface{}
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+	length int
+}
+
+func (w *statusWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusWriter) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.status = 200
+	}
+	n, err := w.ResponseWriter.Write(b)
+	w.length += n
+	return n, err
 }
 
 func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +67,8 @@ func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.doServeHTTP(w, r)
+	srvRes := h.doServeHTTP(w, r)
+	ctx.SetAttr("ReverseRes", srvRes)
 
 	fresp = h.DoFilteringAsEnd(ctx)
 	if fresp.Code != filter.FilteredPassed {
@@ -58,7 +81,7 @@ func (h *HandleReverse) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) bool {
 	uri := fmt.Sprintf("http://%s/service/get?uripath=/api%s", h.endpoint, r.URL.Path)
 	cururl, _ := url.Parse(uri)
 
@@ -66,7 +89,7 @@ func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) {
 	workRes, err := http.Get(cururl.String())
 	if err != nil {
 		w.Write([]byte("out of service"))
-		return
+		return false
 	}
 	result, _ := ioutil.ReadAll(workRes.Body)
 	workRes.Body.Close()
@@ -75,13 +98,13 @@ func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if svrHost == "" {
 		w.WriteHeader(502)
 		w.Write([]byte("out of service\n"))
-		return
+		return false
 	}
 
 	apiURI, err := url.Parse(fmt.Sprintf("http://%s/api%s", svrHost, r.RequestURI))
 	if err != nil {
 		w.Write([]byte("internal server error"))
-		return
+		return false
 	}
 
 	logger.LogInfof("to request apisrv: %s\n", apiURI.String())
@@ -99,7 +122,14 @@ func (h *HandleReverse) doServeHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	rproxy := util.NewMultipleHostsReverseProxy([]*url.URL{apiURI}, transport)
-	rproxy.ServeHTTP(w, r)
+
+	sw := statusWriter{ResponseWriter: w}
+	rproxy.ServeHTTP(&sw, r)
+	// TODO: judge the response code, then return true or false
+	if sw.status < 400 {
+		return true
+	}
+	return false
 }
 
 // DoFilteringAsBegin return (resp, nil) if all filters passed, else (resp, err)

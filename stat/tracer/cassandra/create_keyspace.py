@@ -18,12 +18,12 @@ def createKeySpace():
 
     log.info("Creating keyspace...")
     try:
-        session.execute("""
-            CREATE KEYSPACE %s
-            WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': '2' }
-            """ % KEYSPACE)
-
-        log.info("setting keyspace...")
+#        session.execute("""
+#            CREATE KEYSPACE %s
+#            WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': '2' }
+#            """ % KEYSPACE)
+#
+#        log.info("setting keyspace...")
         session.set_keyspace(KEYSPACE)
 
         log.info("creating table...")
